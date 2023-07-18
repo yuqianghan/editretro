@@ -5,6 +5,7 @@ The directory contains source code of the article: Explainable and Diverse Retro
 In this work, we propose an edit-based retrosynthesis prediction method, called EditRetro, which formulaltes single-step retrosynthesis as a molecular string editing task. EditRetro offers an explainable prediction process by performing explicit Levenshtein sequence editing operations, starting from the target product string. Furthermore, with its 2D noisy parallel decoding strategy, EditRetro can also provide diverse predicitons.
 
 ![Editing process visualization](imgs/model.png)
+<img src=imgs/model.png width="100px">
 
 ## Setup
 Our code is based on facebook fairseq-0.9.0 version modified from https://github.com/weijia-xu/fairseq-editor and https://github.com/nedashokraneh/fairseq-editor.
