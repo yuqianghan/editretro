@@ -1,4 +1,4 @@
-# Explainable and Diverse Retrosynthesis Prediction via Generative Editing Model 
+# Explainable Retrosynthesis Prediction via Generative Editing Model 
 
 The directory contains source code of the article: Explainable and Diverse Retrosynthesis Prediction via Generative Editing Model.
 
