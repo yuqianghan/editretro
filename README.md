@@ -70,7 +70,10 @@ To generate and score the predictions on the test set with mini-batch:
 ```shell
 sh  EditRetro/scripts/inference.sh
 ```
-
+Our method achieves the state-of-the-art performance on the USPTO-50K dataset. 
+<div align=center>
+<img src=results.png width="600px">
+</div>
 
 ## Edit with our prepared checkpoint
 After download the checkpoint trained on USPTO-50K https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing, you can edit your own molecule:
