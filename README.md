@@ -1,10 +1,10 @@
 # Interpretable Retrosynthesis Prediction via Generative Editing Model 
 
-The directory contains source code of the article: Explainable and Diverse Retrosynthesis Prediction via Generative Editing Model.
+The directory contains source code of the article: Interpretable Retrosynthesis Prediction via Generative Editing Model.
 
 In this work, we propose an sequence edit-based retrosynthesis prediction method, called EditRetro, which formulaltes single-step retrosynthesis as a molecular string editing task. EditRetro offers an interpretable prediction process by performing explicit Levenshtein sequence editing operations, starting from the target product string. 
 <div align=center>
-<img src=imgs/model.png width="600px">
+<img src=model.jpg width="600px">
 </div>
 
 ## Setup
