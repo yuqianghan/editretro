@@ -20,6 +20,8 @@ git clone git@github.com:yuqianghan/editretro.git
 
 - Download the fairseq-0.9.0 from https://github.com/facebookresearch/fairseq/releases/tag/v0.9.0 and unzip the file as fairseq-0.9.0.
 
+- Install fairseq to enable it can be used by command line.
+  
 - Before installing fairseq, please place the clib files in _editretro/clib_ into _fairseq/clib_ files and move _editretro/fairseq_cli_ files to _fairseq_cli_.
 
 ```
