@@ -27,7 +27,7 @@ git clone git@github.com:yuqianghan/editretro.git
 ```
 cd fairseq-0.9.0
 pip install --use-pep57 --editable ./ 
-python setup.py build develop
+# python setup.py build develop
 ```
 
 ## Preprocess data
@@ -39,13 +39,13 @@ python setup.py build develop
 
    USPTO-FULL: https://github.com/Hanjun-Dai/GLN
 
-- Download raw datasets and put them in the ./data_process/raw_datasets folder, and then run the command:
+- Download raw datasets and put them in the _editretro/data_process/raw_datasets_ folder, and then run the command to get the preprocessed datasets:
 ```python
-    python ./data_process/generate_aug_spe.py -dataset USPTO_50K -augmentation 20 -processes 8
-    python ./data_process/generate_aug_spe.py -dataset USPTO-MIT -augmentation 5 -processes 8
-    python ./data_process/generate_aug_spe.py -dataset USPTO_full -augmentation 5 -processes 8
+    python editretro/data_process/generate_aug_spe.py -dataset USPTO_50K -augmentation 20 -processes 8
+    python editretro/data_process/generate_aug_spe.py -dataset USPTO-MIT -augmentation 5 -processes 8
+    python editretro/data_process/generate_aug_spe.py -dataset USPTO_full -augmentation 5 -processes 8
 ```
-- Then binarize the data using fairseq
+- Then binarize the data using fairseq, for example, uspto_50k_aug10:
 ```shell
     in_dir=data_after_aug_and_spe/uspto50k_aug10
     out_dir=data_bin
