@@ -12,7 +12,7 @@ Our code is based on facebook fairseq-0.9.0 version modified from https://github
 Before installing fairseq, please place the clib files in EditRetro/clib into fairseq/clib files and EditRetro/fairseq_cli files moved into fairseq_cli files.
 
 ```
-conda create editretro python=3.10.9
+conda create -n editretro python=3.10.9
 pip install torch==1.12.0+cu116 torchvision==0.13.0+cu116 torchaudio==0.12.0 --extra-index-url https://download.pytorch.org/whl/cu116
 cd fairseq
 python setup.py build develop
