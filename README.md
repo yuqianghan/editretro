@@ -25,7 +25,7 @@ git clone git@github.com:yuqianghan/editretro.git
 - Before installing fairseq, please place the clib files in _editretro/clib_ into _fairseq-0.9.0/fairseq/clib_ files and move _editretro/fairseq_cli_ files to _fairseq-0.9.0/fairseq_cli_.
 
 ```
-cd fairseq-0.9.0/fairseq
+cd fairseq-0.9.0
 python setup.py build develop
 ```
 
