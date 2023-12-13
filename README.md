@@ -10,9 +10,9 @@ In this work, we propose an sequence edit-based retrosynthesis prediction method
 ## Setup
 - Our code is based on facebook fairseq-0.9.0 version modified from https://github.com/weijia-xu/fairseq-editor and https://github.com/nedashokraneh/fairseq-editor.
 
-- Download the fairseq-0.9.0 from https://github.com/facebookresearch/fairseq/releases/tag/v0.9.0 and put it in the EditRetro folder.
+- Download the fairseq-0.9.0 from https://github.com/facebookresearch/fairseq/releases/tag/v0.9.0 and put it in the _EditRetro_ folder.
 
-- Before installing fairseq, please place the clib files in EditRetro/clib into fairseq/clib files and move EditRetro/fairseq_cli files to fairseq_cli.
+- Before installing fairseq, please place the clib files in _EditRetro/clib_ into _fairseq/clib_ files and move _EditRetro/fairseq_cli_ files to fairseq_cli.
 
 Create the environment:
 
