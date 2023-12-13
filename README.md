@@ -26,6 +26,7 @@ git clone git@github.com:yuqianghan/editretro.git
 
 ```
 cd fairseq-0.9.0
+pip install --use-pep57 --editable ./ 
 python setup.py build develop
 ```
 
