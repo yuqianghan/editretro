@@ -20,6 +20,4 @@ fairseq-preprocess --source-lang $src --target-lang $tgt \
     --trainpref $in_dir/train --validpref $in_dir/val --testpref $in_dir/test \
     --destdir $out_dir/data-bin_$databin_name \
     --workers 20 \
-    --tgtdict dict.txt \
-    --srcdict dict.txt
 ```
