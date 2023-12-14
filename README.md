@@ -41,7 +41,7 @@ pip install --use-pep57 --editable ./
 
 - Download **raw** datasets and put them in the _editretro/data_process/raw_datasets_ folder, and then run the command to get the preprocessed datasets:
 ```python
-    python editretro/data_process/generate_aug_spe.py -dataset USPTO_50K -augmentation 20 -processes 8
+    python editretro/data_process/generate_aug_spe.py -dataset USPTO_50K -augmentation 10 -processes 8
     python editretro/data_process/generate_aug_spe.py -dataset USPTO-MIT -augmentation 5 -processes 8
     python editretro/data_process/generate_aug_spe.py -dataset USPTO_full -augmentation 5 -processes 8
 ```
