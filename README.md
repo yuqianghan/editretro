@@ -41,16 +41,17 @@ pip install --use-pep57 --editable ./
 
 > Remark: USPTO_FULL dataset. The raw version of USPTO is 1976_Sep2016_USPTOgrants_smiles.rsmi. The script for cleaning and de-duplication can be found under gln/data_process/clean_uspto.py. If you run the script on this raw rsmi file, you are expected to get the same data split as used in the GLN paper. Or you can download the cleaned USPTO dataset released by the authors (see uspto_multi folder under their dropbox folder).
 
-- Download **raw** datasets and put them in the _editretro/data_process/raw_datasets_ folder, and then run the command to get the preprocessed datasets:
+- Download **raw** datasets and put them in the _editretro/data_process/raw_datasets_ folder, and then run the command to get the preprocessed datasets which will be stored in _processed_datasets_:
 ```python
-    python editretro/data_process/generate_aug_spe.py -dataset USPTO_50K -augmentation 10 -processes 8
-    python editretro/data_process/generate_aug_spe.py -dataset USPTO-MIT -augmentation 5 -processes 8
-    python editretro/data_process/generate_aug_spe.py -dataset USPTO_full -augmentation 5 -processes 8
+    cd editretro/data_process
+    python generate_aug_spe.py -dataset USPTO_50K -augmentation 10 -processes 8
+    python generate_aug_spe.py -dataset USPTO-MIT -augmentation 5 -processes 8
+    python generate_aug_spe.py -dataset USPTO_full -augmentation 5 -processes 8
 ```
 
-- Then binarize the data using fairseq, for example, uspto_50k_aug10:
+- Then binarize the data using fairseq, for example, USPTO_50K_aug10:
 ```shell
-    in_dir=data_after_aug_and_spe/uspto50k_aug10
+    in_dir=./processed_datasets/USPTO_50K_aug10
     out_dir=data_bin
     databin_name=uspto50k_aug10
     src=src
