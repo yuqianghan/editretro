@@ -1,4 +1,4 @@
-# Advancing Retrosynthesis Prediction with Iterative Editing Model
+# EditRetro: Advancing Retrosynthesis Prediction with Iterative Editing Model
 
 The directory contains source code of the article: Advancing Retrosynthesis Prediction with Iterative Editing Model.
 
