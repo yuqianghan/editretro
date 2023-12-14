@@ -33,7 +33,7 @@ pip install --use-pep57 --editable ./
 ## Preprocess data
 - The original datasets used in this paper are from:
 
-   USPTO-50K: https://github.com/Hanjun-Dai/GLN
+   USPTO-50K: https://github.com/Hanjun-Dai/GLN  (schneider50k)
 
    USPTO-MIT: https://github.com/wengong-jin/nips17-rexgen/blob/master/USPTO/data.zip
 
