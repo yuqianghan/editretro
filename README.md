@@ -1,6 +1,6 @@
-# Interpretable Retrosynthesis Prediction via Generative Editing Model 
+# Advancing Retrosynthesis Prediction with Iterative Editing Model
 
-The directory contains source code of the article: Interpretable Retrosynthesis Prediction via Generative Editing Model.
+The directory contains source code of the article: Advancing Retrosynthesis Prediction with Iterative Editing Model.
 
 In this work, we propose an sequence edit-based retrosynthesis prediction method, called EditRetro, which formulaltes single-step retrosynthesis as a molecular string editing task. EditRetro offers an interpretable prediction process by performing explicit Levenshtein sequence editing operations, starting from the target product string. 
 <div align=center>
@@ -90,7 +90,7 @@ Our method achieves the state-of-the-art performance on the USPTO-50K dataset.
 <img src=results.png width="600px">
 </div>
 
-## Edit with our prepared checkpoint
+## Inference with our prepared checkpoint
 After download the checkpoint trained on USPTO-50K https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing, you can edit your own molecule:
 ```shell
 sh EditRetro/scripts/generate_single.sh
