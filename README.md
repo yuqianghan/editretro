@@ -8,7 +8,6 @@ In this work, we propose an sequence edit-based retrosynthesis prediction method
 </div>
 
 ## Setup
-- Our code is based on facebook fairseq-0.9.0 version modified from https://github.com/weijia-xu/fairseq-editor and https://github.com/nedashokraneh/fairseq-editor.
 
 - Create the environment:
 
@@ -108,6 +107,9 @@ sh EditRetro/scripts/generate_single.sh
 	year={2023}
 }
 ``` -->
+
+## Reference
+Our code is based on facebook fairseq-0.9.0 version modified from https://github.com/weijia-xu/fairseq-editor and https://github.com/nedashokraneh/fairseq-editor.
 
 ## Others
 Should you have any questions, please contact Yuqiang Han at hyq2015@zju.edu.cn.
