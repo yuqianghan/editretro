@@ -25,8 +25,9 @@ pip install torch==1.12.0+cu116 torchvision==0.13.0+cu116 torchaudio==0.12.0 --e
 ```
 git clone https://github.com/yuqianghan/editretro.git
 cd  editretro
-# pip install --use-pep57 --editable ./ 
-python setup.py build develop
+pip install --editable ./
+python setup.py build_ext --inplace
+# python setup.py build develop
 ```
 
 ## Preprocess data
