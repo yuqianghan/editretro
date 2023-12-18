@@ -14,7 +14,6 @@ In this work, we propose an sequence edit-based retrosynthesis prediction method
  ```
 conda create -n editretro python=3.8.10
 pip install torch==1.12.0+cu116 torchvision==0.13.0+cu116 torchaudio==0.12.0 --extra-index-url https://download.pytorch.org/whl/cu116
-git clone git@github.com:yuqianghan/editretro.git
  ```
 
 - Download the fairseq-0.9.0 from https://github.com/facebookresearch/fairseq/releases/tag/v0.9.0 and unzip the file as fairseq-0.9.0.
@@ -24,9 +23,10 @@ git clone git@github.com:yuqianghan/editretro.git
 - Before installing fairseq, please place the clib files in _editretro/clib_ into _fairseq-0.9.0/fairseq/clib_ files and move _editretro/fairseq_cli_ files to _fairseq-0.9.0/fairseq_cli_.
 
 ```
-cd fairseq-0.9.0
-pip install --use-pep57 --editable ./ 
-# python setup.py build develop
+git clone https://github.com/yuqianghan/editretro.git
+cd  editretro
+# pip install --use-pep57 --editable ./ 
+python setup.py build develop
 ```
 
 ## Preprocess data
