@@ -28,7 +28,12 @@ cd  editretro
 pip install --editable ./
 python setup.py build_ext --inplace
 # python setup.py build develop
+
+
+# sudo apt install re2c
+# sudo apt-get install ninja-build
 ```
+set export CUDA_HOME=/usr/local/cuda in .bashrc
 
 ## Preprocess data
 - The original datasets used in this paper are from:
