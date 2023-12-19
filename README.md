@@ -27,9 +27,9 @@ git clone https://github.com/yuqianghan/editretro.git
 cd  editretro
 pip install --editable ./
 python setup.py build_ext --inplace
-# python setup.py build develop
+```
 
-
+```
 # sudo apt install re2c
 # sudo apt-get install ninja-build
 ```
