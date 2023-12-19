@@ -33,7 +33,7 @@ python setup.py build_ext --inplace
 # sudo apt install re2c
 # sudo apt-get install ninja-build
 ```
-set export CUDA_HOME=/usr/local/cuda in .bashrc
+Remarks: set export CUDA_HOME=/usr/local/cuda in .bashrc
 
 ## Preprocess data
 - The original datasets used in this paper are from:
@@ -46,12 +46,12 @@ set export CUDA_HOME=/usr/local/cuda in .bashrc
 
 > Remark: USPTO_FULL dataset. The raw version of USPTO is 1976_Sep2016_USPTOgrants_smiles.rsmi. The script for cleaning and de-duplication can be found under gln/data_process/clean_uspto.py. If you run the script on this raw rsmi file, you are expected to get the same data split as used in the GLN paper. Or you can download the cleaned USPTO dataset released by the authors (see uspto_multi folder under their dropbox folder).
 
-- Download **raw** datasets and put them in the _editretro/data_process/raw_datasets_ folder, and then run the command to get the preprocessed datasets which will be stored in _processed_datasets_:
+- Download **raw** datasets and put them in the _editretro/retro_epxs/data_process/raw_datasets_ folder, and then run the command to get the preprocessed datasets which will be stored in _processed_datasets_:
 ```python
-    cd editretro/data_process
+    cd editretro/repro_exps/data_process
     python generate_aug_spe.py -dataset USPTO_50K -augmentation 10 -processes 8
     python generate_aug_spe.py -dataset USPTO-MIT -augmentation 5 -processes 8
-    python generate_aug_spe.py -dataset USPTO_full -augmentation 5 -processes 8
+    python generate_aug_spe.py -dataset USPTO_FULL -augmentation 5 -processes 8
 ```
 
 - Then binarize the data using fairseq, for example, USPTO_50K_aug10:
