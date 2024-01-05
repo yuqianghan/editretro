@@ -91,8 +91,6 @@ def compute_rank(prediction, score, alpha=1.0, beam_size=10):
             else:
                 highest[data] = k
 
-        # for key in rank.keys():
-        #     rank[key] += highest[key] * -1e8
     return rank, invalid_rates
 
 

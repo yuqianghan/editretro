@@ -1,4 +1,4 @@
-
+#!/bin/bash
 
 noise_type=random_delete
 gpus="0,1,2,3"
@@ -7,13 +7,13 @@ architecture=pretrain_mlm_editretro
 update=2
 max_tokens=12000
 max_epoch=500
-run_n=1
-exp_n=pretrain
+exp_n=pretrain_full
+run_n=$(date "+%Y%m%d_%H%M%S")
 
-databin=data-bin # databin processed by fairseq
+databin=./datasets/USPTO_FULL/bin # databin processed by fairseq
 
-root_dir=`dirname $0`
-exp_dir=$root_dir/exp_$exp_n
+root_dir='./results'
+exp_dir=$root_dir/$exp_n
 mkdir -p $exp_dir
 
 
@@ -23,13 +23,13 @@ gpu_n=$(echo $gpu_ids | wc -w)
 echo "run_n:$run_n, max_tokens:$max_tokens, databin=${databin}, noise_type=${noise_type}, architecture=${architecture}, arguments=${model_args}, ${gpu_ids}, ${gpu_n}" > $exp_dir/config$run_n
 cat $exp_dir/config$run_n
 
-model_dir=${exp_dir}/checkpoints$run_n
+model_dir=${exp_dir}/$run_n/checkpoints
 mkdir -p ${model_dir}
 
 
 CUDA_VISIBLE_DEVICES=$gpus CUDA_LAUNCH_BLOCKING=1 fairseq-train \
     $databin   \
-    --user-dir EditRetro \
+    --user-dir editretro \
     -s src \
     -t tgt \
     --save-dir ${model_dir}  \
@@ -59,4 +59,4 @@ CUDA_VISIBLE_DEVICES=$gpus CUDA_LAUNCH_BLOCKING=1 fairseq-train \
     --seed 1 \
     --mask-prob 0.15 \
     --pretrain \
-    ${model_args} > ${model_dir}/log
+    ${model_args} > ${model_dir}/pretrain.log

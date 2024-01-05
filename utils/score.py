@@ -1,5 +1,3 @@
-# The code is modified from https://github.com/otori-bird/retrosynthesis/blob/main/score.py
-
 from rdkit import Chem
 import os
 import argparse
@@ -7,9 +5,7 @@ from tqdm import tqdm
 import multiprocessing
 import pandas as pd
 from rdkit import RDLogger
-import re
 import json
-import pickle
 
 lg = RDLogger.logger()
 lg.setLevel(RDLogger.CRITICAL)
@@ -53,120 +49,107 @@ def canonicalize_smiles_clear_map(smiles, return_max_frag=True):
             return ''
 
 
-def compute_rank(prediction, score, raw=False, alpha=1.0):
+def compute_rank(prediction, score, alpha=1.0):
     valid_score = [[k for k in range(len(prediction[j]))]
                    for j in range(len(prediction))]
-    # invalid_rates = [0 for k in range(len(prediction[0]))]
+    invalid_rates = [0 for _ in range(len(prediction[0]))]
     rank = {}
-    max_frag_rank = {}
     highest = {}
-    if raw:
-        # no test augmentation
-        assert len(prediction) == 1
-        for j in range(len(prediction)):
-            # error detection
-            prediction[j] = [i for i in prediction[j] if i[0] != ""]
-            for k, data in enumerate(prediction[j]):
-                rank[data] = 1 / (alpha * k + 1)
-    else:
-        for j in range(len(prediction)):
-            prediction[j] = [
-                i[0] for i in sorted(list(zip(prediction[j], score[j])),
-                                     key=lambda x: x[1],
-                                     reverse=True) if i[0][0] != ""
-            ]
-            score[j] = [
-                i[1] for i in sorted(list(zip(prediction[j], score[j])),
-                                     key=lambda x: x[1],
-                                     reverse=True) if i[0][0] != ""
-            ]
+   
+    for j in range(len(prediction)):
+        temp_invalid = [0 for _ in range(len(prediction[j]))]
+        for k in range(len(prediction[j])):
+            if prediction[j][k][0] == "":
+                valid_score[j][k] = opt.beam_size + 1
+                temp_invalid[k] = 1
 
-            for k, data in enumerate(prediction[j]):
-                if data in rank:
-                    rank[data] += 1 / (alpha * k + 1)
-                else:
-                    rank[data] = 1 / (alpha * k + 1)
-    return rank
+        temp_invalid = sorted(list(zip(temp_invalid, score[j])),
+                            key=lambda x: x[1],
+                            reverse=True)
+        for k in range(len(prediction[j])):
+            invalid_rates[k] += temp_invalid[k][0]
+
+        prediction[j] = [
+            i[0] for i in sorted(list(zip(prediction[j], score[j])),
+                                 key=lambda x: x[1],
+                                 reverse=True) if i[0][0] != ""
+        ]
+
+        for k, data in enumerate(prediction[j]):
+            if data in rank:
+                rank[data] += 1.0 / (alpha * k + 1)
+            else:
+                rank[data] = 1.0 / (alpha * k + 1)
+            if data in highest:
+                highest[data] = min(k, highest[data])
+            else:
+                highest[data] = k
+
+    return rank, invalid_rates
 
 
 def main(opt):
     print('Reading predictions from file ...')
-    if not os.path.exists('./predictions.pkl'):
-        with open(opt.predictions, 'r') as f:
-            lines, raw_scores = [], []
-            for i, row in enumerate(f):
-                data = json.loads(row, strict=False)
-                d = ''.join(data['recover'].strip().split(' '))
-                d = d.replace('<unk>', '')
-                lines.append(d)
-                raw_scores.append(data['logit'])
-            data_size = len(lines) // (opt.augmentation * opt.beam_size
-                                       ) if opt.length == -1 else opt.length
-            lines = lines[:data_size * (opt.augmentation * opt.beam_size)]
-            print("Canonicalizing predictions using Process Number ",
-                  opt.process_number)
-            pool = multiprocessing.Pool(processes=opt.process_number)
-            raw_predictions = pool.map(func=canonicalize_smiles_clear_map,
-                                       iterable=lines)
-            pool.close()
-            pool.join()
+    lines, logits = [], []
+    with open(opt.predictions, 'r') as f:
+        for i, row in enumerate(f):
+            data = json.loads(row, strict=False)
+            line = ''.join(data['pred'].strip().split(' '))
+            line = line.replace('<unk>', '')
+            lines.append(line)
+            logits.append(data['logit'])
+        data_size = len(lines) // (opt.augmentation * opt.beam_size
+                                   ) if opt.length == -1 else opt.length
+        lines = lines[:data_size * (opt.augmentation * opt.beam_size)]
+        
+        print("Canonicalizing predictions using Process Number ",
+              opt.process_number)
+        pool = multiprocessing.Pool(processes=opt.process_number)
+        raw_predictions = pool.map(func=canonicalize_smiles_clear_map,
+                                   iterable=lines)
+        pool.close()
+        pool.join()
 
-            predictions = [[[] for j in range(opt.augmentation)]
-                           for i in range(data_size)
-                           ]  # data_len x augmentation x beam_size
-            for i, line in enumerate(raw_predictions):
-                predictions[i // (opt.beam_size * opt.augmentation)][
-                    i % (opt.beam_size * opt.augmentation) //
-                    opt.beam_size].append(line)
+        predictions = [[[] for j in range(opt.augmentation)]
+                       for i in range(data_size)
+                       ]  # data_len x augmentation x beam_size
+        for i, line in enumerate(raw_predictions):
+            predictions[i // (opt.beam_size * opt.augmentation)][
+                i % (opt.beam_size * opt.augmentation) //
+                opt.beam_size].append(line)
 
-            raw_scores = raw_scores[:data_size *
-                                    (opt.augmentation * opt.beam_size)]
-            scores = [[[] for j in range(opt.augmentation)]
-                      for i in range(data_size)
-                      ]  # data_len x augmentation x beam_size
-            for i, line in enumerate(raw_scores):
-                scores[i // (opt.beam_size * opt.augmentation)][
-                    i % (opt.beam_size * opt.augmentation) //
-                    opt.beam_size].append(line)
+        logits = logits[:data_size * (opt.augmentation * opt.beam_size)]
+        scores = [[[] for j in range(opt.augmentation)]
+                  for i in range(data_size)
+                  ]  # data_len x augmentation x beam_size
+        for i, line in enumerate(logits):
+            scores[i // (opt.beam_size * opt.augmentation)][
+                i % (opt.beam_size * opt.augmentation) //
+                opt.beam_size].append(line)
 
-        with open('./predictions.pkl', 'wb') as f_pred:
-            pickle.dump(predictions, f_pred, -1)
-
-        with open('./scores.pkl', 'wb') as f_score:
-            pickle.dump(scores, f_score, -1)
-    else:
-        with open('./predictions.pkl', 'rb') as f_pred:
-            predictions = pickle.load(f_pred)
-        with open('./scores.pkl', 'rb') as f_score:
-            scores = pickle.load(f_score)
-        data_size = len(predictions)
-
-    print("data size ", data_size)
+    print("Prediction data size ", data_size)
+    
+    
     print('Reading targets from file ...')
-    if not os.path.exists('./targets.pkl'):
-        with open(opt.targets, 'r') as f:
-            lines = []
-            for i, row in enumerate(f):
-                data = json.loads(row)['reference']
-                d = ''.join(data.strip().split(' '))
-                d = d.replace('<unk>', '')
-                lines.append(d)
-            print("Origin File Length", len(lines))
-            targets = [
-                ''.join(lines[i].strip().split(' ')) for i in tqdm(
-                    range(0, data_size * opt.augmentation *
-                          opt.beam_size, opt.augmentation * opt.beam_size))
-            ]
-            pool = multiprocessing.Pool(processes=opt.process_number)
-            targets = pool.map(func=canonicalize_smiles_clear_map,
-                               iterable=targets)
-            pool.close()
-            pool.join()
-        with open('./targets.pkl', 'wb') as f_tgt:
-            pickle.dump(targets, f_tgt, -1)
-    else:
-        with open('./targets.pkl', 'rb') as f_tgt:
-            targets = pickle.load(f_tgt)
+    with open(opt.targets, 'r') as f:
+        lines = []
+        for i, row in enumerate(f):
+            data = json.loads(row)['tgt']
+            line = ''.join(data.strip().split(' '))
+            line = line.replace('<unk>', '')
+            lines.append(line)
+        print("Origin File Length", len(lines))
+        targets = [
+            ''.join(lines[i].strip().split(' ')) for i in tqdm(
+                range(0, data_size * opt.augmentation *
+                      opt.beam_size, opt.augmentation * opt.beam_size))
+        ]
+        pool = multiprocessing.Pool(processes=opt.process_number)
+        targets = pool.map(func=canonicalize_smiles_clear_map,
+                           iterable=targets)
+        pool.close()
+        pool.join()
+
 
     ground_truth = targets
     print("Origin Target Length, ", len(ground_truth))
@@ -183,6 +166,7 @@ def main(opt):
     atomsize_topk = []
     accurate_indices = [[] for j in range(opt.n_best)]
     max_frag_accuracy = [0 for j in range(opt.n_best)]
+    invalid_rates = [0 for j in range(opt.beam_size)]
     sorted_invalid_rates = [0 for j in range(opt.beam_size)]
     unique_rates = 0
     ranked_results = []
@@ -210,8 +194,7 @@ def main(opt):
             pro_ringnum = pro_ringinfo.NumRings()
             rea_ringnum = rea_ringinfo.NumRings()
             size = len(rea_mol.GetAtoms()) - len(pro_mol.GetAtoms())
-            if ras_src_smiles[i].count("@") > 0 or ground_truth[i][0].count(
-                    "@") > 0:
+            if ras_src_smiles[i].count("@") > 0 or ground_truth[i][0].count("@") > 0:
                 total_chirality += 1
                 chirality_flag = True
             if pro_ringnum < rea_ringnum:
@@ -221,18 +204,17 @@ def main(opt):
                 total_ringformation += 1
                 ringformation_flag = True
 
-        rank = compute_rank(predictions[i],
+        rank, invalid_rate = compute_rank(predictions[i],
                                           scores[i],
-                                          raw=opt.raw,
                                           alpha=opt.score_alpha)
-
+        for j in range(opt.beam_size):
+            invalid_rates[j] += invalid_rate[j]
         rank = list(zip(rank.keys(), rank.values()))
         rank.sort(key=lambda x: x[1], reverse=True)
         rank = rank[:opt.n_best]
         ranked_results.append([item[0][0] for item in rank])
         for j, item in enumerate(rank):
-            if set(item[0][0].split('.')) == set(
-                    ground_truth[i][0].split('.')):
+            if set(item[0][0].split('.')) == set(ground_truth[i][0].split('.')):
                 if not accurate_flag:
                     accurate_flag = True
                     accurate_indices[j].append(i)
@@ -406,7 +388,6 @@ if __name__ == "__main__":
                         default=multiprocessing.cpu_count())
     parser.add_argument('-synthon', action="store_true", default=False)
     parser.add_argument('-detailed', action="store_true", default=False)
-    parser.add_argument('-raw', action="store_true", default=False)
     parser.add_argument('-save_file', type=str, default="")
     parser.add_argument('-save_accurate_indices', type=str, default="")
 
