@@ -4,7 +4,7 @@ The directory contains source code of the article: Advancing Retrosynthesis Pred
 
 In this work, we propose an sequence edit-based retrosynthesis prediction method, called EditRetro, which formulaltes single-step retrosynthesis as a molecular string editing task. EditRetro offers an interpretable prediction process by performing explicit Levenshtein sequence editing operations, starting from the target product string. 
 <div align=center>
-<img src=model.png width="600px">
+<img src=figures/model.png width="500px">
 </div>
 
 ## Setup
@@ -39,7 +39,7 @@ sudo apt-get install ninja-build
 
 
 ## Preprocess data
-- The original datasets used in this paper are from:
+ The original datasets used in this paper are from:
 
    USPTO-50K: https://github.com/Hanjun-Dai/GLN  (schneider50k)
 
@@ -49,7 +49,7 @@ sudo apt-get install ninja-build
 
 > Remark: USPTO_FULL dataset. The raw version of USPTO is 1976_Sep2016_USPTOgrants_smiles.rsmi. The script for cleaning and de-duplication can be found under gln/data_process/clean_uspto.py. If you run the script on this raw rsmi file, you are expected to get the same data split as used in the GLN paper. Or you can download the cleaned USPTO dataset released by the authors (see uspto_multi folder under their dropbox folder).
 
-- Download **raw** datasets and put them in the _editretro/datasets/XXX(e.g., USPTO_50K)/raw_ folder, and then run the command to get the preprocessed datasets which will be stored in _editretro/datasets/XXX/aug_:
+Download **raw** datasets and put them in the _editretro/datasets/XXX(e.g., USPTO_50K)/raw_ folder, and then run the command to get the preprocessed datasets which will be stored in _editretro/datasets/XXX/aug_:
 
 ```python
     cd editretro (the root directory of the project)
@@ -58,24 +58,24 @@ sudo apt-get install ninja-build
     python ./preprocess/generate_aug_spe.py -dataset USPTO_FULL -augmentation 5 -processes 8
 ```
 
-- Then binarize the data using 
+Then binarize the data using 
 ```shell
 sh ./preprocess/binarize.sh
 ```
 
 
 ## Pretrain and Finetune
-- Pre-train on the augmented USPTO-FULL datasets with jointly masked modeling:
+Pre-train on the augmented USPTO-FULL datasets with jointly masked modeling:
 ```shell
-    sh ./scripts/pretrain.sh
+sh ./scripts/pretrain.sh
 ```
-- Fine-tune on specific dataset, for example, USPTO-50K:
+Fine-tune on specific dataset, for example, USPTO-50K:
 ```shell
-    sh ./scripts/finetune.sh
+sh ./scripts/finetune.sh
 ```
-- The model can also be trained from scratch:
+The model can also be trained from scratch:
 ```shell
-    sh ./scripts/train_from_scratch.sh
+sh ./scripts/train_from_scratch.sh
 ```
 
 
@@ -88,16 +88,22 @@ or with raw text data:
 ```shell
 sh ./scripts/interactive.sh
 ```
+You will get the output like this:
+<div align=center>
+<img src=figures/output.png width="300px">
+</div>
+
+
 
 Our method achieves the state-of-the-art performance on the USPTO-50K dataset. 
 <div align=center>
-<img src=results.png width="400px">
+<img src=figures/results.png width="400px">
 </div>
 
 ## Inference with our prepared checkpoint
-After download the checkpoint trained on USPTO-50K https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing, you can edit your own molecule:
+After download the checkpoint pretrained on USPTO-FULL and then finetuned on USPTO-50K https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing, you can edit your own molecule:
 ```shell
-sh EditRetro/scripts/generate_single.sh
+sh ./scripts/interactive_single.sh
 ```
 
 
