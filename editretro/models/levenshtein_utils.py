@@ -447,3 +447,68 @@ def _fill(x, mask, y, padding_idx):
     else:
         x[mask] = y
     return x
+
+
+INF = 1e10
+TINY = 1e-9
+# --- Top K search with PQ
+def TopK_search(nlogP, mask_src, N=10):
+    # prepare data
+    # nlogP = -log_softmax(logits).data
+    maxL = nlogP.size(-1)
+    overmask = torch.cat([mask_src[:, :, None],
+                        (1 - mask_src[:, :, None]).expand(*mask_src.size(), maxL-1) * INF
+                        + mask_src[:, :, None]], 2)
+    nlogP = nlogP * overmask
+
+    batch_size, src_len, L = nlogP.size()  # [bsz, src_len, L]
+    
+    _, R = nlogP.sort(dim=-1, descending=True)
+
+    def get_score(data, index):
+        # avoid all zero
+        # zero_mask = (index.sum(-2) == 0).float() * INF
+        return data.gather(-1, index).sum(-2)
+
+    heap_scores = torch.ones(batch_size, N) * INF
+    heap_inx = torch.zeros(batch_size, src_len, N).long()
+    heap_scores[:, :1] = get_score(nlogP, R[:, :, :1])
+    if nlogP.is_cuda:
+        heap_scores = heap_scores.cuda(nlogP.get_device())
+        heap_inx = heap_inx.cuda(nlogP.get_device())
+
+    def span(ins):
+        inds = torch.eye(ins.size(1)).long()
+        if ins.is_cuda:
+            inds = inds.cuda(ins.get_device())
+        return ins[:, :, None].expand(ins.size(0), ins.size(1), ins.size(1)) + inds[None, :, :]
+
+    print(nlogP)
+    # iteration starts
+    for k in range(1, N):
+        cur_inx = heap_inx[:, :, k-1]
+        # print('cur_index', cur_inx.shape)
+        print(cur_inx)
+        I_t = span(cur_inx).clamp(0, L-1)  # B x N x N
+        # print('I_t', I_t.shape)
+        S_t = get_score(nlogP, R.gather(-1, I_t))
+        S_t, _inx = torch.cat([heap_scores[:, k:], S_t], 1).sort(1)
+        S_t[:, 1:] += ((S_t[:, 1:] - S_t[:, :-1]) == 0).float() * INF  # remove duplicates
+        S_t, _inx2 = S_t.sort(1)
+        I_t = torch.cat([heap_inx[:, :, k:], I_t], 2).gather(
+                        2, _inx.gather(1, _inx2)[:, None, :].expand(batch_size, src_len, _inx.size(-1)))
+        heap_scores[:, k:] = S_t[:, :N-k]
+        heap_inx[:, :, k:] = I_t[:, :, :N-k]
+        print(heap_scores)
+        print(heap_inx)
+
+    # get the searched
+    output = R.gather(-1, heap_inx)
+    output = output.transpose(2, 1).contiguous().view(batch_size * N, src_len)  # (B x N) x Ts
+    # output = Variable(output)
+    mask_src = mask_src[:, None, :].expand(batch_size, N, src_len).contiguous().view(batch_size * N, src_len)
+    
+    # print('output', output.shape)
+    print(output)
+
+    return output, mask_src

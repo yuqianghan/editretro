@@ -7,11 +7,22 @@ import pandas as pd
 from rdkit import RDLogger
 import json
 
+import selfies as sf
+
 lg = RDLogger.logger()
 lg.setLevel(RDLogger.CRITICAL)
 
 
 def canonicalize_smiles_clear_map(smiles, return_max_frag=True):
+    if opt.self:
+        try:
+            smiles = sf.decoder(smiles)
+        except:
+            if return_max_frag:
+                return '', ''
+            else:
+                return ''
+        
     mol = Chem.MolFromSmiles(smiles, sanitize=not opt.synthon)
     if mol is not None:
         [
@@ -54,7 +65,6 @@ def compute_rank(prediction, score, alpha=1.0):
                    for j in range(len(prediction))]
     invalid_rates = [0 for _ in range(len(prediction[0]))]
     rank = {}
-    highest = {}
    
     for j in range(len(prediction)):
         temp_invalid = [0 for _ in range(len(prediction[j]))]
@@ -74,16 +84,12 @@ def compute_rank(prediction, score, alpha=1.0):
                                  key=lambda x: x[1],
                                  reverse=True) if i[0][0] != ""
         ]
-
+ 
         for k, data in enumerate(prediction[j]):
             if data in rank:
                 rank[data] += 1.0 / (alpha * k + 1)
             else:
                 rank[data] = 1.0 / (alpha * k + 1)
-            if data in highest:
-                highest[data] = min(k, highest[data])
-            else:
-                highest[data] = k
 
     return rank, invalid_rates
 
@@ -251,6 +257,7 @@ def main(opt):
 
     for i in range(opt.n_best):
         if i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 19, 49]:
+        # if True:
             print(
                 "Top-{} Acc:{:.3f}%, MaxFrag {:.3f}%,".format(
                     i + 1, accuracy[i] / data_size * 100,
@@ -390,7 +397,7 @@ if __name__ == "__main__":
     parser.add_argument('-detailed', action="store_true", default=False)
     parser.add_argument('-save_file', type=str, default="")
     parser.add_argument('-save_accurate_indices', type=str, default="")
+    parser.add_argument('-self', action="store_true")
 
     opt = parser.parse_args()
-    # print(opt)
     main(opt)

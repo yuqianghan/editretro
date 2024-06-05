@@ -13,7 +13,7 @@ from editretro.models.iterative_refinement_generator import DecoderOut
 from fairseq.models import register_model, register_model_architecture
 from fairseq.models.transformer import (Embedding, TransformerDecoderLayer)
 
-from fairseq.models.nat import (FairseqNATModel, FairseqNATDecoder,
+from fairseq.models.nat import (FairseqNATModel, FairseqNATDecoder, FairseqNATEncoder,
                                 ensemble_decoder)
 
 from fairseq.modules.transformer_sentence_encoder import init_bert_params
@@ -29,10 +29,13 @@ from editretro.models.levenshtein_utils import (
     _apply_reposition_words,
 )
 
+from fairseq.models import CompositeEncoder
+
 # import pandas as pd
 import numpy as np
 
 SEED = 2023
+# MSK_INS = 16
 
 def setup_seed(seed):
     random.seed(seed)
@@ -68,9 +71,9 @@ class EditRetroModel(FairseqNATModel):
         FairseqNATModel.add_args(parser)
         parser.add_argument(
             "--early-exit",
-            default="6,6,6",
+            default="6,6,6", # TODO: 
             type=str,
-            help="number of decoder layers before word_del, mask_ins, word_ins",
+            help="number of decoder layers before word_repos, mask_ins, word_ins",
         )
         parser.add_argument(
             "--no-share-discriminator",
@@ -99,7 +102,7 @@ class EditRetroModel(FairseqNATModel):
 
         parser.add_argument("--alpha-ratio",
                             type=float,
-                            help='ratio of inserted string as y_del')
+                            help='ratio of inserted string as y_reps')
 
     @classmethod
     def build_decoder(cls, args, tgt_dict, embed_tokens):
@@ -109,7 +112,7 @@ class EditRetroModel(FairseqNATModel):
         decoder.dae_ratio = getattr(args, "dae_ratio", 0.5)
         decoder.alpha_ratio = getattr(args, "alpha_ratio", 0.5)
         return decoder
-
+    
     def forward(self, src_tokens, src_lengths, lp_src_tokens,
                 prev_output_tokens, tgt_tokens, **kwargs):
 
@@ -119,10 +122,11 @@ class EditRetroModel(FairseqNATModel):
 
         encoder_out = self.encoder(src_tokens,
                                    src_lengths=src_lengths,
-                                   **kwargs)
-
+                                   **kwargs)        
+        
         word_reposition = _get_advanced_reposition_targets(
-            lp_src_tokens, tgt_tokens, self.pad)
+                                lp_src_tokens, tgt_tokens, self.pad)
+            
         y_ins, _, _, _ = _apply_reposition_words(
             lp_src_tokens,
             None,
@@ -133,6 +137,7 @@ class EditRetroModel(FairseqNATModel):
             self.bos,
             self.eos,
         )
+        
         if self.decoder.dae_ratio > 0:
             corrupted = (torch.rand(size=(lp_src_tokens.size(0), ),
                                     device=lp_src_tokens.device)
@@ -145,9 +150,8 @@ class EditRetroModel(FairseqNATModel):
 
         masked_tgt_masks, masked_tgt_tokens, mask_ins_targets = _get_advanced_ins_targets(
             y_ins, tgt_tokens, self.pad, self.unk)
-        mask_ins_targets = mask_ins_targets.clamp(
-            min=0, max=255)  # for safe prediction
-        mask_ins_masks = y_ins[:, 1:].ne(self.pad)
+        mask_ins_targets = mask_ins_targets.clamp(min=0, max=255)  # for safe prediction # TODO
+        mask_ins_masks = y_ins[:, 1:].ne(self.pad)   
 
         mask_ins_out, _ = self.decoder.forward_mask_ins(
             normalize=False, prev_output_tokens=y_ins, encoder_out=encoder_out)
@@ -160,15 +164,18 @@ class EditRetroModel(FairseqNATModel):
             "out": mask_ins_out,
             "tgt": mask_ins_targets,
             "mask": mask_ins_masks,
-            "ls": 0.01,
+            "ls": 0.01,             # 0.2,
+            "ls-type": "uniform",         #  "binomial"
+            "factor": 1.0,
         }
+        
         objs['word_ins'] = {
             "out": word_ins_out,
             "tgt": tgt_tokens,
             "mask": masked_tgt_masks,
             "ls": self.args.label_smoothing,
             "nll_loss": True,
-            "factor": 1.0,
+            "factor": 1.0,  # TODO;
         }
 
         if self.decoder.sampling_for_deletion:
@@ -177,36 +184,38 @@ class EditRetroModel(FairseqNATModel):
                 1).view(word_ins_out.size(0), -1)
         else:
             word_predictions = F.log_softmax(word_ins_out, dim=-1).max(-1)[1]
-
+            
         word_predictions.masked_scatter_(~masked_tgt_masks,
                                          tgt_tokens[~masked_tgt_masks])
 
         ####### string ready to learn reposition from #######
-        y_del = lp_src_tokens
+        y_reps = lp_src_tokens
         if self.decoder.alpha_ratio > 0:
-            y_del, word_predictions = same_size(y_del, word_predictions,
+            y_reps, word_predictions = same_size(y_reps, word_predictions,
                                                 self.pad)
             corrupted = (torch.rand(size=(lp_src_tokens.size(0), ),
                                     device=lp_src_tokens.device)
                          < self.decoder.alpha_ratio)
-            y_del[corrupted] = word_predictions[corrupted]
+            y_reps[corrupted] = word_predictions[corrupted]
 
-        y_del, tgt_tokens = same_size(y_del, tgt_tokens, self.pad)
+        y_reps, tgt_tokens = same_size(y_reps, tgt_tokens, self.pad)
 
         word_reposition_targets = _get_advanced_reposition_targets(
-            y_del, tgt_tokens, self.pad)
+            y_reps, tgt_tokens, self.pad)
         word_reposition_out, _ = self.decoder.forward_word_reposition(
-            normalize=False, prev_output_tokens=y_del, encoder_out=encoder_out)
-        word_reposition_masks = y_del.ne(self.pad)
+            normalize=False, prev_output_tokens=y_reps, encoder_out=encoder_out)
+        word_reposition_masks = y_reps.ne(self.pad)
 
         objs['word_reposition'] = {
             "out": word_reposition_out,
             "tgt": word_reposition_targets,
             "mask": word_reposition_masks,
-            "factor": 1.0,
+            "ls": 0,
+            "factor": 1.0, # TODO;
         }
 
         return objs
+
 
     def forward_decoder(self,
                         decoder_out,
@@ -218,6 +227,8 @@ class EditRetroModel(FairseqNATModel):
                         del_reward=0.0,
                         max_ratio=None,
                         oracle_repos=False,
+                        oracle_mask=False,
+                        oracle_token=False,
                         **kwargs):
         output_tokens = decoder_out.output_tokens
         output_marks = decoder_out.output_marks
@@ -240,35 +251,7 @@ class EditRetroModel(FairseqNATModel):
         # do not apply if it is <s> </s>
         can_reposition_word = output_tokens.ne(self.pad).sum(1) > 2
         if can_reposition_word.sum() != 0:
-
-            word_reposition_score, word_reposition_attn = self.decoder.forward_word_reposition(
-                normalize=True,
-                prev_output_tokens=_skip(output_tokens, can_reposition_word),
-                encoder_out=_skip_encoder_out(self.encoder, encoder_out,
-                                              can_reposition_word))
-
-            if hard_constrained_decoding:
-                no_del_mask = output_marks[can_reposition_word].ne(0)
-                word_del_score = word_reposition_score[:, :, 0]
-                word_del_score.masked_fill_(no_del_mask, -float('Inf'))
-                word_reposition_score = torch.cat([
-                    word_del_score.unsqueeze(2), word_reposition_score[:, :,
-                                                                       1:]
-                ], 2)
-
-            word_reposition_score[:, :,
-                                  0] = word_reposition_score[:, :,
-                                                             0] + del_reward
-            word_reposition_pred = word_reposition_score.max(-1)[1]
-
-            num_deletion = word_reposition_pred.eq(
-                0).sum().item() - word_reposition_pred.size(0)
-            total_deletion_ops += num_deletion
-            total_reposition_ops += word_reposition_pred.ne(
-                torch.arange(word_reposition_pred.size(1),
-                             device=word_reposition_pred.device).unsqueeze(
-                                 0)).sum().item() - num_deletion
-
+            
             if oracle_repos:
                 oracle_word_reposition_pred = _get_advanced_reposition_targets(
                     output_tokens, tgt_tokens, self.pad)
@@ -282,7 +265,34 @@ class EditRetroModel(FairseqNATModel):
                     self.bos,
                     self.eos,
                 )
+
             else:
+                word_reposition_score, word_reposition_attn = self.decoder.forward_word_reposition(
+                    normalize=True,
+                    prev_output_tokens=_skip(output_tokens, can_reposition_word),
+                    encoder_out=_skip_encoder_out(self.encoder, encoder_out,
+                                                  can_reposition_word))
+    
+                if hard_constrained_decoding:
+                    no_del_mask = output_marks[can_reposition_word].ne(0)
+                    word_del_score = word_reposition_score[:, :, 0]
+                    word_del_score.masked_fill_(no_del_mask, -float('Inf'))
+                    word_reposition_score = torch.cat([
+                        word_del_score.unsqueeze(2), word_reposition_score[:, :,
+                                                                           1:]
+                    ], 2)
+    
+                word_reposition_score[:, :, 0] = word_reposition_score[:, :, 0] + del_reward
+                word_reposition_pred = word_reposition_score.max(-1)[1]
+    
+                num_deletion = word_reposition_pred.eq(
+                    0).sum().item() - word_reposition_pred.size(0)
+                total_deletion_ops += num_deletion
+                total_reposition_ops += word_reposition_pred.ne(
+                    torch.arange(word_reposition_pred.size(1),
+                                 device=word_reposition_pred.device).unsqueeze(
+                                     0)).sum().item() - num_deletion
+
                 _tokens, _marks, _scores, _attn = _apply_reposition_words(
                     output_tokens[can_reposition_word],
                     output_marks[can_reposition_word],
@@ -307,33 +317,49 @@ class EditRetroModel(FairseqNATModel):
         # insert placeholders
         can_ins_mask = output_tokens.ne(self.pad).sum(1) < max_lens
         if can_ins_mask.sum() != 0:
-            mask_ins_score, _ = self.decoder.forward_mask_ins(
-                normalize=True,
-                prev_output_tokens=_skip(output_tokens, can_ins_mask),
-                encoder_out=_skip_encoder_out(self.encoder, encoder_out,
-                                              can_ins_mask))
-            if eos_penalty > 0:
-                mask_ins_score[:, :, 0] = mask_ins_score[:, :, 0] - eos_penalty
-            mask_ins_pred = mask_ins_score.max(-1)[1]
-            mask_ins_pred = torch.min(
-                mask_ins_pred, max_lens[can_ins_mask,
-                                        None].expand_as(mask_ins_pred))
+            
+            if oracle_mask:
+                _, _, mask_ins_targets = _get_advanced_ins_targets(
+                                    output_tokens, tgt_tokens, self.pad, self.unk)
+                mask_ins_targets = mask_ins_targets.clamp(min=0, max=255)  # for safe prediction
+                _tokens, _marks, _scores = _apply_ins_masks(
+                    output_tokens[can_ins_mask],
+                    output_marks[can_ins_mask],
+                    output_scores[can_ins_mask],
+                    mask_ins_targets,
+                    self.pad,
+                    self.unk,
+                    self.eos,
+                )
+                
+            else:
+                mask_ins_score, _ = self.decoder.forward_mask_ins(
+                    normalize=True,
+                    prev_output_tokens=_skip(output_tokens, can_ins_mask),
+                    encoder_out=_skip_encoder_out(self.encoder, encoder_out,
+                                                  can_ins_mask))
+                if eos_penalty > 0:
+                    mask_ins_score[:, :, 0] = mask_ins_score[:, :, 0] - eos_penalty
+                mask_ins_pred = mask_ins_score.max(-1)[1]
+                mask_ins_pred = torch.min(
+                    mask_ins_pred, max_lens[can_ins_mask,
+                                            None].expand_as(mask_ins_pred))
+    
+                if hard_constrained_decoding:
+                    no_ins_mask = output_marks[can_ins_mask][:, :-1].eq(1)
+                    mask_ins_pred.masked_fill_(no_ins_mask, 0)
+    
+                total_insertion_ops += mask_ins_pred.sum().item()
 
-            if hard_constrained_decoding:
-                no_ins_mask = output_marks[can_ins_mask][:, :-1].eq(1)
-                mask_ins_pred.masked_fill_(no_ins_mask, 0)
-
-            total_insertion_ops += mask_ins_pred.sum().item()
-
-            _tokens, _marks, _scores = _apply_ins_masks(
-                output_tokens[can_ins_mask],
-                output_marks[can_ins_mask],
-                output_scores[can_ins_mask],
-                mask_ins_pred,
-                self.pad,
-                self.unk,
-                self.eos,
-            )
+                _tokens, _marks, _scores = _apply_ins_masks(
+                    output_tokens[can_ins_mask],
+                    output_marks[can_ins_mask],
+                    output_scores[can_ins_mask],
+                    mask_ins_pred,
+                    self.pad,
+                    self.unk,
+                    self.eos,
+                )
 
             output_tokens = _fill(output_tokens, can_ins_mask, _tokens,
                                   self.pad)
@@ -346,19 +372,34 @@ class EditRetroModel(FairseqNATModel):
         # insert words
         can_ins_word = output_tokens.eq(self.unk).sum(1) > 0
         if can_ins_word.sum() != 0:
-            word_ins_score, word_ins_attn = self.decoder.forward_word_ins(
-                normalize=True,
-                prev_output_tokens=_skip(output_tokens, can_ins_word),
-                encoder_out=_skip_encoder_out(self.encoder, encoder_out,
-                                              can_ins_word))
-            word_ins_score, word_ins_pred = word_ins_score.max(-1)
-            _tokens, _scores = _apply_ins_words(
-                output_tokens[can_ins_word],
-                output_scores[can_ins_word],
-                word_ins_pred,
-                word_ins_score,
-                self.unk,
-            )
+            
+            if oracle_token:
+                _, masked_tgt_tokens, _ = _get_advanced_ins_targets(output_tokens, tgt_tokens, self.pad, self.unk)
+                _tokens, _scores = _apply_ins_words(
+                    output_tokens[can_ins_word],
+                    output_scores[can_ins_word],
+                    masked_tgt_tokens,
+                    None,
+                    self.unk,
+                )
+                
+            else:
+                word_ins_score, word_ins_attn = self.decoder.forward_word_ins(
+                    normalize=True, #TODO
+                    prev_output_tokens=_skip(output_tokens, can_ins_word),
+                    encoder_out=_skip_encoder_out(self.encoder, encoder_out,
+                                                  can_ins_word))
+                
+                # TODO: run argmax greedy decoding 
+                word_ins_score, word_ins_pred = word_ins_score.max(-1)
+                
+                _tokens, _scores = _apply_ins_words(
+                    output_tokens[can_ins_word],
+                    output_scores[can_ins_word],
+                    word_ins_pred,
+                    word_ins_score,
+                    self.unk,
+                )
 
             output_tokens = _fill(output_tokens, can_ins_word, _tokens,
                                   self.pad)
@@ -384,20 +425,16 @@ class EditRetroModel(FairseqNATModel):
                                              total_insertion_ops),
                                     history=history)
 
-    def forward_decoder_step1(self,
+    def forward_decoder_reposition(self,
                               decoder_out,
                               encoder_out,
-                              src_tokens,
                               tgt_tokens,
-                              hard_constrained_decoding=False,
-                              eos_penalty=0.0,
                               del_reward=0.0,
-                              max_ratio=None,
                               oracle_repos=False,
-                              TOPK=5,
+                              repos_beam=5,
+                              insert_beam=1,
                               **kwargs):
 
-        # setup_seed(SEED)
         output_tokens = decoder_out.output_tokens
         output_marks = decoder_out.output_marks
         output_scores = decoder_out.output_scores
@@ -405,81 +442,69 @@ class EditRetroModel(FairseqNATModel):
         total_reposition_ops, total_deletion_ops, total_insertion_ops = decoder_out.num_ops
         history = decoder_out.history
         bsz = output_tokens.size(0)
+        
         can_reposition_word = output_tokens.ne(self.pad).sum(1) > 2
         if can_reposition_word.sum() != 0:
-
             word_reposition_score, word_reposition_attn = self.decoder.forward_word_reposition(
-                normalize=True,
+                normalize=True,  ### TODO
                 prev_output_tokens=_skip(output_tokens, can_reposition_word),
                 encoder_out=_skip_encoder_out(self.encoder, encoder_out,
                                               can_reposition_word))
 
-            if hard_constrained_decoding:
-                no_del_mask = output_marks[can_reposition_word].ne(0)
-                word_del_score = word_reposition_score[:, :, 0]
-                word_del_score.masked_fill_(no_del_mask, -float('Inf'))
-                word_reposition_score = torch.cat([
-                    word_del_score.unsqueeze(2), word_reposition_score[:, :,
-                                                                       1:]
-                ], 2)
+            word_reposition_score[:, :, 0] = word_reposition_score[:, :, 0] + del_reward
+            
+            if repos_beam > 1:
+                bz, SEQLEN = word_reposition_score.size(0), word_reposition_score.size(1)
+    
+                try:
+                    word_reposition_pred = word_reposition_score.topk(
+                        repos_beam, dim=-1)[1].permute(0, 2, 1)
+                    N = repos_beam
+                except:
+                    word_reposition_pred = word_reposition_score.topk(
+                        word_reposition_score.size(-1),
+                        dim=-1)[1].permute(0, 2, 1)
+                    N = word_reposition_score.size(-1)
+                    
+                rank1 = word_reposition_pred[:, 0, :].repeat_interleave(repos_beam, dim=0)
+                rank2 = word_reposition_pred[:, 1, :].repeat_interleave(repos_beam, dim=0)
 
-            word_reposition_score[:, :,
-                                  0] = word_reposition_score[:, :,
-                                                             0] + del_reward
+                ranks = []
+                for i in range(word_reposition_pred.size(1)):
+                    a = word_reposition_pred[:, i, :]
+                    ranks.append(a)
+    
+                ranki = torch.zeros((bz * repos_beam, SEQLEN))
+                for k in range(repos_beam):
+                    for i in range(bz):
+                        if k == repos_beam - 1:
+                            ranki[i * repos_beam + k, :] = ranks[1][i, :]
+                        else:
+                            ranki[i * repos_beam + k, :] = ranks[min(max(1, int(repos_beam * k / N)),
+                                                        len(ranks) - 1)][i, :]
 
-            bz, SEQLEN = word_reposition_score.size(
-                0), word_reposition_score.size(1)
-
-            word_reposition_pred = word_reposition_score.topk(
-                2, dim=-1)[1].permute(0, 2, 1)
-            r1 = word_reposition_pred[:, 0, :].repeat_interleave(TOPK, dim=0)
-            r2 = word_reposition_pred[:, 1, :].repeat_interleave(TOPK, dim=0)
-
-            try:
-                word_reposition_pred = word_reposition_score.topk(
-                    5, dim=-1)[1].permute(0, 2, 1)
-                N = 5
-            except:
-                word_reposition_pred = word_reposition_score.topk(
-                    word_reposition_score.size(-1),
-                    dim=-1)[1].permute(0, 2, 1)
-                N = word_reposition_score.size(-1)
-
-            r = []
-            for i in range(word_reposition_pred.size(1)):
-                a = word_reposition_pred[:, i, :]
-                r.append(a)
-
-            ri = torch.zeros((bz * TOPK, SEQLEN))
-            for k in range(TOPK):
-                for i in range(bz):
-                    if k == TOPK - 1:
-                        ri[i * TOPK + k, :] = r[1][i, :]
-                    else:
-                        ri[i * TOPK + k, :] = r[min(max(1, int(TOPK * k / N)),
-                                                    len(r) - 1)][i, :]
-
-            c = (torch.rand(size=(bz * TOPK, SEQLEN),
+                c = (torch.rand(size=(bz * repos_beam, SEQLEN),
                             device=word_reposition_pred.device) < 0.2)
-            r2[c] = ri.long().cuda(r1.device)[c]
+                rank2[c] = ranki.long().cuda(rank1.device)[c]
 
-            corrupted = torch.rand(size=(bz, TOPK, SEQLEN),
+                corrupted = torch.rand(size=(bz, repos_beam, SEQLEN),
                                    device=word_reposition_pred.device)
+                MIX = torch.arange(0, repos_beam,
+                               device=word_reposition_pred.device) / (repos_beam - 1)
+                corrupted = corrupted < MIX[..., None]
+                corrupted = corrupted.reshape(bz * repos_beam, SEQLEN)
+                rank1[corrupted] = rank2[corrupted]
+                word_reposition_pred = rank1
 
-            MIX = torch.arange(0, TOPK,
-                               device=word_reposition_pred.device) / (TOPK - 1)
-            corrupted = corrupted < MIX[..., None]
-            corrupted = corrupted.reshape(bz * TOPK, SEQLEN)
-            r1[corrupted] = r2[corrupted]
-            word_reposition_pred = r1
+                output_tokens = output_tokens.repeat_interleave(repos_beam, dim=0)
+                output_marks = output_marks.repeat_interleave(repos_beam, dim=0)
+                output_scores = output_scores.repeat_interleave(repos_beam, dim=0)
+                can_reposition_word = output_tokens.ne(self.pad).sum(1) > 2
+                
+            else:
+                word_reposition_pred = word_reposition_score.max(-1)[1]
 
-            output_tokens = output_tokens.repeat_interleave(TOPK, dim=0)
-            output_marks = output_marks.repeat_interleave(TOPK, dim=0)
-            output_scores = output_scores.repeat_interleave(TOPK, dim=0)
-            can_reposition_word = output_tokens.ne(self.pad).sum(1) > 2
-
-            num_deletion = word_reposition_pred.eq(
-                0).sum().item() - word_reposition_pred.size(0)
+            num_deletion = word_reposition_pred.eq(0).sum().item() - word_reposition_pred.size(0)
             total_deletion_ops += num_deletion
             total_reposition_ops += word_reposition_pred.ne(
                 torch.arange(word_reposition_pred.size(1),
@@ -487,7 +512,6 @@ class EditRetroModel(FairseqNATModel):
                                  0)).sum().item() - num_deletion
 
             if oracle_repos:
-
                 oracle_word_reposition_pred = _get_advanced_reposition_targets(
                     output_tokens, tgt_tokens, self.pad)
                 _tokens, _marks, _scores, _attn = _apply_reposition_words(
@@ -511,15 +535,24 @@ class EditRetroModel(FairseqNATModel):
                     self.bos,
                     self.eos,
                 )
-            output_tokens = _fill(output_tokens, can_reposition_word, _tokens,
-                                  self.pad)
+            output_tokens = _fill(output_tokens, can_reposition_word, _tokens, self.pad)
             output_marks = _fill(output_marks, can_reposition_word, _marks, 0)
-            output_scores = _fill(output_scores, can_reposition_word, _scores,
-                                  0)
+            output_scores = _fill(output_scores, can_reposition_word, _scores, 0)
             attn = _fill(attn, can_reposition_word, _attn, 0.)
+          
             if history is not None:
-                history.append(output_tokens.clone().repeat_interleave(2,
-                                                                       dim=0))
+                if insert_beam > 1:
+                    history.append(output_tokens.clone().repeat_interleave(insert_beam, dim=0))
+                else:
+                    history.append(output_tokens.clone())
+                    
+        # delete some unnecessary paddings
+        cut_off = output_tokens.ne(self.pad).sum(1).max()
+        output_tokens = output_tokens[:, :cut_off]
+        output_marks = output_marks[:, :cut_off]
+        output_scores = output_scores[:, :cut_off]
+        attn = None if attn is None else attn[:, :cut_off, :]
+        
         return decoder_out._replace(output_tokens=output_tokens,
                                     output_marks=output_marks,
                                     output_scores=output_scores,
@@ -529,20 +562,19 @@ class EditRetroModel(FairseqNATModel):
                                              total_insertion_ops),
                                     history=history)
 
-    def forward_decoder_step2(self,
-                              decoder_out,
-                              encoder_out,
-                              src_tokens,
-                              tgt_tokens,
-                              hard_constrained_decoding=False,
-                              eos_penalty=0.0,
-                              del_reward=0.0,
-                              max_ratio=None,
-                              oracle_repos=False,
-                              TOPK=2,
-                              **kwargs):
-        # setup_seed(SEED)
-        # TOPK = 2
+
+    def forward_decoder_mask(self,
+                            decoder_out,
+                            encoder_out,
+                            tgt_tokens,
+                            eos_penalty=0.0,
+                            max_ratio=None,
+                            oracle_mask=False,
+                            mask_beam=1,
+                            token_beam=1,
+                            mask_mode='topk', # 'mixed', 'topk'
+                            **kwargs):
+       
         output_tokens = decoder_out.output_tokens
         output_marks = decoder_out.output_marks
         output_scores = decoder_out.output_scores
@@ -560,23 +592,68 @@ class EditRetroModel(FairseqNATModel):
                 src_lens = (~encoder_out.encoder_padding_mask).sum(1)
             max_lens = (src_lens * max_ratio).clamp(min=10).long()
 
+        # insert mask placeholder
         can_ins_mask = output_tokens.ne(self.pad).sum(1) < max_lens
         if can_ins_mask.sum() != 0:
             mask_ins_score, _ = self.decoder.forward_mask_ins(
                 normalize=True,
                 prev_output_tokens=_skip(output_tokens, can_ins_mask),
-                encoder_out=_skip_encoder_out(self.encoder, encoder_out,
-                                              can_ins_mask))
+                encoder_out=_skip_encoder_out(self.encoder, encoder_out, can_ins_mask))
+            
             if eos_penalty > 0:
                 mask_ins_score[:, :, 0] = mask_ins_score[:, :, 0] - eos_penalty
-            mask_ins_pred = mask_ins_score.max(-1)[1]
-            mask_ins_pred = torch.min(
-                mask_ins_pred, max_lens[can_ins_mask,
-                                        None].expand_as(mask_ins_pred))
+                
+            if mask_beam == 1:
+                mask_ins_pred = mask_ins_score.max(-1)[1]
+                mask_ins_pred = torch.min(mask_ins_pred, max_lens[can_ins_mask, None].expand_as(mask_ins_pred))
+            
+            # TODO: length beam
+            elif mask_mode == 'topk':
+                SEQLEN = mask_ins_score.size(1)
+                mask_ins_pred = mask_ins_score.topk(mask_beam, dim=-1)[1]
+                mask_ins_pred = mask_ins_pred.permute(0, 2, 1).reshape(-1, SEQLEN)
+                can_ins_mask = can_ins_mask.repeat_interleave(mask_beam, dim=0)
+                max_lens = max_lens.repeat_interleave(mask_beam, dim=0)
+                mask_ins_pred = torch.min(mask_ins_pred,  max_lens[can_ins_mask, None].expand_as(mask_ins_pred))
+                
+                output_tokens = output_tokens.repeat_interleave(mask_beam, dim=0)
+                output_marks = output_marks.repeat_interleave(mask_beam, dim=0)
+                output_scores = output_scores.repeat_interleave(mask_beam, dim=0)
+                if attn != None:
+                    attn = attn.repeat_interleave(mask_beam, dim=0)
+                    
+            elif mask_mode == 'mixed':
+                
+                bz, SEQLEN = mask_ins_score.size(0), mask_ins_score.size(1)
+                mask_ins_pred = mask_ins_score.topk(mask_beam, dim=-1)[1].permute(0, 2, 1)
+               
+                rank1 = mask_ins_pred[:, 0, :].repeat_interleave(mask_beam, dim=0)
+                rank2 = mask_ins_pred[:, 1, :].repeat_interleave(mask_beam, dim=0)
+                
+                c = (torch.rand(size=(bz * mask_beam, SEQLEN), device=mask_ins_pred.device) < 0.2)
+                mask_ins_pred_reshape = mask_ins_pred.reshape(-1, SEQLEN)
+                rank2[c] = mask_ins_pred_reshape.long().cuda(rank1.device)[c]
 
-            if hard_constrained_decoding:
-                no_ins_mask = output_marks[can_ins_mask][:, :-1].eq(1)
-                mask_ins_pred.masked_fill_(no_ins_mask, 0)
+                corrupted = torch.rand(size=(bz, mask_beam, SEQLEN), device=mask_ins_pred.device)
+                MIX = torch.arange(0, mask_beam, device=mask_ins_pred.device) / (mask_beam - 1)
+                corrupted = corrupted < MIX[..., None]
+                corrupted = corrupted.reshape(bz * mask_beam, SEQLEN)
+                rank1[corrupted] = rank2[corrupted]
+                mask_ins_pred = rank1
+                
+                can_ins_mask = can_ins_mask.repeat_interleave(mask_beam, dim=0)
+                max_lens = max_lens.repeat_interleave(mask_beam, dim=0)
+                mask_ins_pred = torch.min(mask_ins_pred,  max_lens[can_ins_mask, None].expand_as(mask_ins_pred))
+                
+                output_tokens = output_tokens.repeat_interleave(mask_beam, dim=0)
+                output_marks = output_marks.repeat_interleave(mask_beam, dim=0)
+                output_scores = output_scores.repeat_interleave(mask_beam, dim=0)
+                if attn != None:
+                    attn = attn.repeat_interleave(mask_beam, dim=0)
+                
+            else:
+                raise NotImplementedError
+
 
             total_insertion_ops += mask_ins_pred.sum().item()
 
@@ -590,71 +667,15 @@ class EditRetroModel(FairseqNATModel):
                 self.eos,
             )
 
-            output_tokens = _fill(output_tokens, can_ins_mask, _tokens,
-                                  self.pad)
+            output_tokens = _fill(output_tokens, can_ins_mask, _tokens, self.pad)
             output_marks = _fill(output_marks, can_ins_mask, _marks, 0)
             output_scores = _fill(output_scores, can_ins_mask, _scores, 0)
 
             if history is not None:
-                history.append(output_tokens.clone().repeat_interleave(2,
-                                                                       dim=0))
-
-        # insert words
-        can_ins_word = output_tokens.eq(self.unk).sum(1) > 0
-        if can_ins_word.sum() != 0:
-            word_ins_score, word_ins_attn = self.decoder.forward_word_ins(
-                normalize=True,
-                prev_output_tokens=_skip(output_tokens, can_ins_word),
-                encoder_out=_skip_encoder_out(self.encoder, encoder_out,
-                                              can_ins_word))
-            word_ins_score, word_ins_pred = word_ins_score.topk(TOPK, dim=-1)
-
-            SEQLEN = word_ins_score.size(1)
-
-            word_ins_score = word_ins_score.permute(0, 2,
-                                                    1).reshape(-1, SEQLEN)
-            word_ins_pred = word_ins_pred.permute(0, 2, 1).reshape(-1, SEQLEN)
-
-            output_tokens = output_tokens.repeat_interleave(TOPK, dim=0)
-            output_marks = output_marks.repeat_interleave(TOPK, dim=0)
-            output_scores = output_scores.repeat_interleave(TOPK, dim=0)
-            if attn != None:
-                attn = attn.repeat_interleave(TOPK, dim=0)
-
-            can_ins_word = output_tokens.eq(self.unk).sum(1) > 0
-            # word_ins_score, word_ins_pred = word_ins_score.max(-1)
-
-            _tokens, _scores = _apply_ins_words(
-                output_tokens[can_ins_word],
-                output_scores[can_ins_word],
-                word_ins_pred,
-                word_ins_score,
-                self.unk,
-            )
-
-            _tokens, _scores = _apply_ins_words(
-                output_tokens[can_ins_word],
-                output_scores[can_ins_word],
-                word_ins_pred,
-                word_ins_score,
-                self.unk,
-            )
-
-            output_tokens = _fill(output_tokens, can_ins_word, _tokens,
-                                  self.pad)
-            output_scores = _fill(output_scores, can_ins_word, _scores, 0)
-            attn = _fill(attn, can_ins_word, word_ins_attn, 0.)
-
-            if history is not None:
-                history.append(output_tokens.clone())
-
-        else:
-            output_tokens = output_tokens.repeat_interleave(TOPK, dim=0)
-            output_marks = output_marks.repeat_interleave(TOPK, dim=0)
-            output_scores = output_scores.repeat_interleave(TOPK, dim=0)
-            if attn != None:
-                attn = attn.repeat_interleave(TOPK, dim=0)
-            can_ins_word = output_tokens.eq(self.unk).sum(1) > 0
+                if token_beam > 1:
+                    history.append(output_tokens.clone().repeat_interleave(token_beam, dim=0))
+                else:    
+                    history.append(output_tokens.clone())
 
         # delete some unnecessary paddings
         cut_off = output_tokens.ne(self.pad).sum(1).max()
@@ -671,9 +692,126 @@ class EditRetroModel(FairseqNATModel):
                                              total_deletion_ops,
                                              total_insertion_ops),
                                     history=history)
+        
+        
+    def forward_decoder_token(self,
+                              decoder_out,
+                              encoder_out,
+                              tgt_tokens,
+                              eos_penalty=0.0,
+                              max_ratio=None,
+                              oracle_token=False,
+                              token_beam=1,
+                              token_mode='topk',  # 'mixed', 'topk' 
+                              **kwargs):
+       
+        output_tokens = decoder_out.output_tokens
+        output_marks = decoder_out.output_marks
+        output_scores = decoder_out.output_scores
+        attn = decoder_out.attn
+        total_reposition_ops, total_deletion_ops, total_insertion_ops = decoder_out.num_ops
+        history = decoder_out.history
 
-        # insert placeholders
+        # insert words
+        can_ins_word = output_tokens.eq(self.unk).sum(1) > 0
+        if can_ins_word.sum() != 0:
+            word_ins_score, word_ins_attn = self.decoder.forward_word_ins(
+                normalize=True,
+                prev_output_tokens=_skip(output_tokens, can_ins_word),
+                encoder_out=_skip_encoder_out(self.encoder, encoder_out,
+                                              can_ins_word))
 
+            if token_beam == 1:
+                # TODO: argmax greedy decoding
+                word_ins_score, word_ins_pred = word_ins_score.max(-1)
+                
+            elif token_mode == 'topk':
+            # TODO: top-k decoding
+                SEQLEN = word_ins_score.size(1)
+                word_ins_score, word_ins_pred = word_ins_score.topk(token_beam, dim=-1)
+    
+                word_ins_score = word_ins_score.permute(0, 2, 1).reshape(-1, SEQLEN)
+                word_ins_pred = word_ins_pred.permute(0, 2, 1).reshape(-1, SEQLEN)
+    
+                output_tokens = output_tokens.repeat_interleave(token_beam, dim=0)
+                output_marks = output_marks.repeat_interleave(token_beam, dim=0)
+                output_scores = output_scores.repeat_interleave(token_beam, dim=0)
+                if attn != None:
+                    attn = attn.repeat_interleave(token_beam, dim=0)
+    
+                can_ins_word = output_tokens.eq(self.unk).sum(1) > 0
+            
+            elif token_mode == 'mixed':
+                
+                bz, SEQLEN = word_ins_score.size(0), word_ins_score.size(1)
+                word_ins_score, word_ins_pred = word_ins_score.topk(token_beam, dim=-1)
+                
+                word_ins_score = word_ins_score.permute(0, 2, 1)
+                word_ins_pred = word_ins_pred.permute(0, 2, 1)
+               
+                rank1 = word_ins_pred[:, 0, :].repeat_interleave(token_beam, dim=0)
+                rank2 = word_ins_pred[:, 1, :].repeat_interleave(token_beam, dim=0)
+                
+                score1 = word_ins_score[:, 0, :].repeat_interleave(token_beam, dim=0)
+                score2 = word_ins_score[:, 1, :].repeat_interleave(token_beam, dim=0)
+
+                word_ins_score_reshape = word_ins_score.reshape(-1, SEQLEN)
+                word_ins_pred_reshape = word_ins_pred.reshape(-1, SEQLEN)
+                c = (torch.rand(size=(bz * token_beam, SEQLEN), device=word_ins_pred.device) < 0.2)
+                rank2[c] = word_ins_pred_reshape.long().cuda(rank1.device)[c]
+                score2[c] = word_ins_score_reshape.float().cuda(score1.device)[c]
+
+                corrupted = torch.rand(size=(bz, token_beam, SEQLEN), device=word_ins_pred.device)
+                MIX = torch.arange(0, token_beam, device=word_ins_pred.device) / (token_beam - 1)
+                corrupted = corrupted < MIX[..., None]
+                corrupted = corrupted.reshape(bz * token_beam, SEQLEN)
+                rank1[corrupted] = rank2[corrupted]
+                word_ins_pred = rank1
+                score1[corrupted] = score2[corrupted]
+                word_ins_score = score1
+                
+                output_tokens = output_tokens.repeat_interleave(token_beam, dim=0)
+                output_marks = output_marks.repeat_interleave(token_beam, dim=0)
+                output_scores = output_scores.repeat_interleave(token_beam, dim=0)
+                if attn != None:
+                    attn = attn.repeat_interleave(token_beam, dim=0)
+    
+                can_ins_word = output_tokens.eq(self.unk).sum(1) > 0
+                
+            else:
+                raise NotImplementedError
+            
+            _tokens, _scores = _apply_ins_words(
+                output_tokens[can_ins_word],
+                output_scores[can_ins_word],
+                word_ins_pred,
+                word_ins_score,
+                self.unk,
+            )
+
+            output_tokens = _fill(output_tokens, can_ins_word, _tokens, self.pad)
+            output_scores = _fill(output_scores, can_ins_word, _scores, 0)
+            attn = _fill(attn, can_ins_word, word_ins_attn, 0.)
+
+            if history is not None:
+                history.append(output_tokens.clone())
+
+        # delete some unnecessary paddings
+        cut_off = output_tokens.ne(self.pad).sum(1).max()
+        output_tokens = output_tokens[:, :cut_off]
+        output_marks = output_marks[:, :cut_off]
+        output_scores = output_scores[:, :cut_off]
+        attn = None if attn is None else attn[:, :cut_off, :]
+
+        return decoder_out._replace(output_tokens=output_tokens,
+                                    output_marks=output_marks,
+                                    output_scores=output_scores,
+                                    attn=attn,
+                                    num_ops=(total_reposition_ops,
+                                             total_deletion_ops,
+                                             total_insertion_ops),
+                                    history=history)    
+        
     def initialize_output_tokens(self,
                                  encoder_out,
                                  src_tokens,
@@ -712,9 +850,8 @@ class EditRetroDecoder(FairseqNATDecoder):
         self.bos = dictionary.bos()
         self.unk = dictionary.unk()
         self.eos = dictionary.eos()
-        self.sampling_for_deletion = getattr(args, "sampling_for_deletion",
-                                             False)
-        self.embed_mask_ins = Embedding(256, self.output_embed_dim * 2, None)
+        self.sampling_for_deletion = getattr(args, "sampling_for_deletion", False)
+        self.embed_mask_ins = Embedding(256, self.output_embed_dim * 2, None)  # TODO
 
         # del_word, ins_mask, ins_word
         self.early_exit = [int(i) for i in args.early_exit.split(',')]
@@ -833,18 +970,20 @@ class EditRetroDecoder(FairseqNATDecoder):
                                 prev_output_tokens, **unused):
         features, extra = self.extract_features(prev_output_tokens,
                                                 encoder_out=encoder_out,
-                                                early_exit=self.early_exit[2],
+                                                early_exit=self.early_exit[0],
                                                 layers=self.layers_reposition,
                                                 **unused)
         prev_output_embed = self.embed_tokens(prev_output_tokens)
+        
         # B x T x T
         decoder_out = torch.bmm(features, prev_output_embed.transpose(1, 2))
+        
         if normalize:
             return F.log_softmax(decoder_out, -1), extra['attn']
         return decoder_out, extra['attn']
 
 
-@register_model_architecture("editretro_nat", "editretro_nat")
+@register_model_architecture("editretro_nat", "editretro_nat")  # TODO: architecture name
 def EditRetro_base_architecture(args):
     args.encoder_embed_path = getattr(args, "encoder_embed_path", None)
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
@@ -861,17 +1000,14 @@ def EditRetro_base_architecture(args):
                                          args.encoder_ffn_embed_dim)
     args.decoder_layers = getattr(args, "decoder_layers", 6)
     args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 8)
-    args.decoder_normalize_before = getattr(args, "decoder_normalize_before",
-                                            False)
+    args.decoder_normalize_before = getattr(args, "decoder_normalize_before", False)
     args.decoder_learned_pos = getattr(args, "decoder_learned_pos", False)
     args.attention_dropout = getattr(args, "attention_dropout", 0.0)
     args.activation_dropout = getattr(args, "activation_dropout", 0.0)
     args.activation_fn = getattr(args, "activation_fn", "relu")
     args.dropout = getattr(args, "dropout", 0.1)
-    args.adaptive_softmax_cutoff = getattr(args, "adaptive_softmax_cutoff",
-                                           None)
-    args.adaptive_softmax_dropout = getattr(args, "adaptive_softmax_dropout",
-                                            0)
+    args.adaptive_softmax_cutoff = getattr(args, "adaptive_softmax_cutoff", None)
+    args.adaptive_softmax_dropout = getattr(args, "adaptive_softmax_dropout", 0)
     args.share_decoder_input_output_embed = getattr(
         args, "share_decoder_input_output_embed", False)
     args.share_all_embeddings = getattr(args, "share_all_embeddings", False)
@@ -885,10 +1021,94 @@ def EditRetro_base_architecture(args):
     args.decoder_input_dim = getattr(args, "decoder_input_dim",
                                      args.decoder_embed_dim)
     args.early_exit = getattr(args, "early_exit", "6,6,6")
-    args.no_share_discriminator = getattr(args, "no_share_discriminator",
-                                          False)
-    args.no_share_maskpredictor = getattr(args, "no_share_maskpredictor",
-                                          False)
+    args.no_share_discriminator = getattr(args, "no_share_discriminator", False)
+    args.no_share_maskpredictor = getattr(args, "no_share_maskpredictor", False)
+    args.share_discriminator_maskpredictor = getattr(
+        args, "share_discriminator_maskpredictor", False)
+    args.no_share_last_layer = getattr(args, "no_share_last_layer", False)
+
+
+
+@register_model_architecture("editretro_nat", "editretro")  # TODO: architecture name
+def EditRetro_full_architecture(args):
+    args.encoder_embed_path = getattr(args, "encoder_embed_path", None)
+    args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
+    args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 2048)
+    args.encoder_layers = getattr(args, "encoder_layers", 6)
+    args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 8)
+    args.encoder_normalize_before = getattr(args, "encoder_normalize_before", False)
+    args.encoder_learned_pos = getattr(args, "encoder_learned_pos", False)
+    args.decoder_embed_path = getattr(args, "decoder_embed_path", None)
+    args.decoder_embed_dim = getattr(args, "decoder_embed_dim",
+                                     args.encoder_embed_dim)
+    args.decoder_ffn_embed_dim = getattr(args, "decoder_ffn_embed_dim",
+                                         args.encoder_ffn_embed_dim)
+    args.decoder_layers = getattr(args, "decoder_layers", 6)
+    args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 8)
+    args.decoder_normalize_before = getattr(args, "decoder_normalize_before", False)
+    args.decoder_learned_pos = getattr(args, "decoder_learned_pos", False)
+    args.attention_dropout = getattr(args, "attention_dropout", 0.0)
+    args.activation_dropout = getattr(args, "activation_dropout", 0.0)
+    args.activation_fn = getattr(args, "activation_fn", "relu")
+    args.dropout = getattr(args, "dropout", 0.1)
+    args.adaptive_softmax_cutoff = getattr(args, "adaptive_softmax_cutoff", None)
+    args.adaptive_softmax_dropout = getattr(args, "adaptive_softmax_dropout", 0)
+    args.share_decoder_input_output_embed = getattr(
+        args, "share_decoder_input_output_embed", False)
+    args.share_all_embeddings = getattr(args, "share_all_embeddings", False)
+    args.no_token_positional_embeddings = getattr(
+        args, "no_token_positional_embeddings", False)
+    args.adaptive_input = getattr(args, "adaptive_input", False)
+    args.apply_bert_init = getattr(args, "apply_bert_init", False)
+
+    args.decoder_output_dim = getattr(args, "decoder_output_dim",
+                                      args.decoder_embed_dim)
+    args.decoder_input_dim = getattr(args, "decoder_input_dim",
+                                     args.decoder_embed_dim)
+    args.early_exit = getattr(args, "early_exit", "6,6,6")
+    args.no_share_discriminator = getattr(args, "no_share_discriminator", False)
+    args.no_share_maskpredictor = getattr(args, "no_share_maskpredictor", False)
+    args.share_discriminator_maskpredictor = getattr(
+        args, "share_discriminator_maskpredictor", False)
+    args.no_share_last_layer = getattr(args, "no_share_last_layer", False)
+
+
+@register_model_architecture("editretro_nat", "editretro_nat_50k")  # TODO: architecture name
+def EditRetro_small_architecture(args):
+    args.encoder_embed_path = getattr(args, "encoder_embed_path", None)
+    args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 256)
+    args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 2048)
+    args.encoder_layers = getattr(args, "encoder_layers", 6)
+    args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 8)
+    args.encoder_normalize_before = getattr(args, "encoder_normalize_before", False)
+    args.encoder_learned_pos = getattr(args, "encoder_learned_pos", False)
+    args.decoder_embed_path = getattr(args, "decoder_embed_path", None)
+    args.decoder_embed_dim = getattr(args, "decoder_embed_dim", args.encoder_embed_dim)
+    args.decoder_ffn_embed_dim = getattr(args, "decoder_ffn_embed_dim", args.encoder_ffn_embed_dim)
+    args.decoder_layers = getattr(args, "decoder_layers", 6)
+    args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 8)
+    args.decoder_normalize_before = getattr(args, "decoder_normalize_before", False)
+    args.decoder_learned_pos = getattr(args, "decoder_learned_pos", False)
+    args.attention_dropout = getattr(args, "attention_dropout", 0.0)
+    args.activation_dropout = getattr(args, "activation_dropout", 0.0)
+    args.activation_fn = getattr(args, "activation_fn", "relu")
+    args.dropout = getattr(args, "dropout", 0.1)
+    args.adaptive_softmax_cutoff = getattr(args, "adaptive_softmax_cutoff", None)
+    args.adaptive_softmax_dropout = getattr(args, "adaptive_softmax_dropout", 0)
+    args.share_decoder_input_output_embed = getattr(
+        args, "share_decoder_input_output_embed", False)
+    args.share_all_embeddings = getattr(args, "share_all_embeddings", False)
+    args.no_token_positional_embeddings = getattr(
+        args, "no_token_positional_embeddings", False)
+    args.adaptive_input = getattr(args, "adaptive_input", False)
+    args.apply_bert_init = getattr(args, "apply_bert_init", False)
+    args.decoder_output_dim = getattr(args, "decoder_output_dim", args.decoder_embed_dim)
+    args.decoder_input_dim = getattr(args, "decoder_input_dim", args.decoder_embed_dim)
+    args.layernorm_embedding = getattr(args, "layernorm_embedding", False)
+    
+    args.early_exit = getattr(args, "early_exit", "6,6,6")
+    args.no_share_discriminator = getattr(args, "no_share_discriminator", False)
+    args.no_share_maskpredictor = getattr(args, "no_share_maskpredictor", False)
     args.share_discriminator_maskpredictor = getattr(
         args, "share_discriminator_maskpredictor", False)
     args.no_share_last_layer = getattr(args, "no_share_last_layer", False)

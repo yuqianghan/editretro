@@ -26,7 +26,7 @@ class IterativeRefinementGenerator(object):
         eos_penalty=0.0,
         del_reward=0.0,
         max_iter=10,
-        max_ratio=2,
+        max_ratio=5,
         beam_size=1,
         decoding_format=None,
         retain_dropout=False,
@@ -38,7 +38,12 @@ class IterativeRefinementGenerator(object):
         random_seed=1,
         init_src=False,
         oracle_repos=False,
-        TOPK=5,
+        oracle_mask=False,
+        oracle_token=False,
+        TOPK=10,
+        repos_beam=5,
+        token_beam=2,
+        mask_beam=1
     ):
         """
         Generates translations based on iterative refinement.
@@ -74,7 +79,12 @@ class IterativeRefinementGenerator(object):
         self.models = models
         self.init_src = init_src
         self.oracle_repos = oracle_repos
+        self.oracle_mask = oracle_mask
+        self.oracle_token = oracle_token
         self.TOPK = TOPK
+        self.repos_beam = repos_beam
+        self.token_beam = token_beam
+        self.mask_beam = mask_beam
 
     def generate_batched_itr(
         self,
@@ -182,8 +192,7 @@ class IterativeRefinementGenerator(object):
 
         sent_idxs = torch.arange(bsz * self.TOPK, device=src_tokens.device)
         prev_output_tokens = prev_decoder_out.output_tokens.clone()
-        prev_output_tokens = prev_output_tokens.repeat_interleave(self.TOPK,
-                                                                  dim=0)
+        prev_output_tokens = prev_output_tokens.repeat_interleave(self.TOPK, dim=0)
 
         if self.retain_history:
             prev_decoder_out = prev_decoder_out._replace(
@@ -246,6 +255,8 @@ class IterativeRefinementGenerator(object):
                 "tgt_tokens": tgt_tokens,
                 "src_tokens": sample["net_input"]["src_tokens"],
                 "oracle_repos": self.oracle_repos,
+                "oracle_mask": self.oracle_mask,
+                "oracle_token": self.oracle_token,
             }
 
             prev_decoder_out = prev_decoder_out._replace(
@@ -253,35 +264,43 @@ class IterativeRefinementGenerator(object):
                 max_step=self.max_iter + 1,
             )
 
-            assert self.TOPK in [1, 2, 4, 6, 10]
+            assert self.TOPK in [1, 2, 3, 4, 5, 10, 20, 30, 40, 50]
+            assert self.repos_beam * self.mask_beam * self.token_beam == self.TOPK
+            
+            if self.TOPK > 1 and step == 0:
+                decoder_out = model.forward_decoder_reposition(
+                    prev_decoder_out,
+                    encoder_out,
+                    repos_beam=self.repos_beam,
+                    insert_beam=self.mask_beam * self.token_beam,
+                    **decoder_options)
 
-            if self.TOPK != 1:
-                if step != 0:
-                    decoder_out = model.forward_decoder(
-                        prev_decoder_out, encoder_out, **decoder_options)
-                else:
-                    decoder_out = model.forward_decoder_step1(
-                        prev_decoder_out,
-                        encoder_out,
-                        TOPK=int(self.TOPK / 2),
-                        **decoder_options)
+                length_beam_order = utils.new_arange(
+                                    src_tokens, self.repos_beam, bsz).t().reshape(-1)
+                encoder_out = model.encoder.reorder_encoder_out(
+                                    encoder_out, length_beam_order)
+                decoder_out = model.forward_decoder_mask(
+                                    decoder_out,
+                                    encoder_out,
+                                    mask_beam=self.mask_beam,
+                                    token_beam=self.token_beam,
+                                    **decoder_options)
 
-                    length_beam_order = utils.new_arange(
-                        src_tokens, int(self.TOPK / 2),
-                        bsz).t().reshape(-1)
-                    encoder_out = model.encoder.reorder_encoder_out(
-                        encoder_out, length_beam_order)
-                    decoder_out = model.forward_decoder_step2(
-                        decoder_out,
-                        encoder_out,
-                        TOPK=2,
-                        **decoder_options)
-
-                    length_beam_order = utils.new_arange(
-                        src_tokens, 2,
-                        bsz * int(self.TOPK / 2)).t().reshape(-1)
-                    encoder_out = model.encoder.reorder_encoder_out(
-                        encoder_out, length_beam_order)
+                length_beam_order = utils.new_arange(
+                                    src_tokens, self.mask_beam, bsz * self.repos_beam).t().reshape(-1)
+                encoder_out = model.encoder.reorder_encoder_out(
+                                    encoder_out, length_beam_order)
+                decoder_out = model.forward_decoder_token(
+                                    decoder_out,
+                                    encoder_out,
+                                    token_beam=self.token_beam,
+                                    **decoder_options)
+                
+                length_beam_order = utils.new_arange(
+                                    src_tokens, self.token_beam, bsz * self.repos_beam * self.mask_beam).t().reshape(-1)
+                encoder_out = model.encoder.reorder_encoder_out(
+                                    encoder_out, length_beam_order)                
+                
             else:
                 decoder_out = model.forward_decoder(
                     prev_decoder_out, encoder_out, **decoder_options)

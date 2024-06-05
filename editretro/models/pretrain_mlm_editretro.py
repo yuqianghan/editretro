@@ -79,6 +79,8 @@ class Pretrain_MLM_EditRetro(FairseqNATModel):
             help="share the parameters for both mask-predictor and discriminator",
         )
         parser.add_argument('--pretrain', action='store_true')
+        # parser.add_argument('--no-encoder-attn', action='store_true')
+        
 
     @classmethod
     def build_decoder(cls, args, tgt_dict, embed_tokens):
@@ -161,6 +163,7 @@ class Pretrain_MLM_EditRetro(FairseqNATModel):
             "lm_loss": {
                 'out': encoder_out.masked_encoder_out,
                 'tgt': lm_masked_targets,
+                'factor': 0.01,  # 0.01
             }
         }
 
@@ -499,6 +502,7 @@ def EditRetro_base_architecture(args):
     args.no_token_positional_embeddings = getattr(args, "no_token_positional_embeddings", False)
     args.adaptive_input = getattr(args, "adaptive_input", False)
     args.apply_bert_init = getattr(args, "apply_bert_init", False)
+    args.no_encoder_attn = getattr(args, "no_encoder_attn", False)
 
     args.decoder_output_dim = getattr(args, "decoder_output_dim", args.decoder_embed_dim)
     args.decoder_input_dim = getattr(args, "decoder_input_dim", args.decoder_embed_dim)

@@ -3,5 +3,5 @@ pandas==2.1.4
 rdkit==2023.9.2
 SmilesPE==0.0.3
 textdistance==4.6.0
-torch=1.12.0+cu116
+torch>=1.12.0+cu116
 tensorboard==2.15.1

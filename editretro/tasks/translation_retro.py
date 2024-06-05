@@ -12,6 +12,7 @@ from fairseq.utils import new_arange
 from fairseq.tasks import register_task
 from fairseq.tasks.translation import TranslationTask, load_langpair_dataset
 from fairseq import utils
+import random
 
 
 @register_task('translation_retro')
@@ -43,9 +44,20 @@ class EditRetroTask(TranslationTask):
             "--oracle-repos", action="store_true",
             help="use oracle reposition during inference",
         )
-        parser.add_argument('--TOPK',default=10,type=int)
+        parser.add_argument(
+            "--oracle-mask", action="store_true",
+            help="use oracle mask during inference",
+        )
+        parser.add_argument(
+            "--oracle-token", action="store_true",
+            help="use oracle token during inference",
+        )
+        parser.add_argument('--TOPK', default=10, type=int)
+        parser.add_argument('--repos-beam', default=5, type=int)
+        parser.add_argument('--token-beam', default=2, type=int)
+        parser.add_argument('--mask-beam', default=1, type=int)
         parser.add_argument('--inference-with-augmentation',default=False,action="store_true")
-        parser.add_argument('--aug',default=10,type=int)
+        parser.add_argument('--aug',default=20,type=int)
 
 
     def load_dataset(self, split, epoch=1, combine=False, **kwargs):
@@ -178,8 +190,13 @@ class EditRetroTask(TranslationTask):
             random_seed=getattr(args, 'random_seed', 1),
             init_src=getattr(args, 'init_src', True),
             oracle_repos=getattr(args, 'oracle_repos', False),
-            TOPK=getattr(args, 'TOPK', 10))
-
+            oracle_mask=getattr(args, 'oracle_mask', False),
+            oracle_token=getattr(args, 'oracle_token', False),
+            TOPK=getattr(args, 'TOPK', 10),
+            repos_beam=getattr(args, 'repos_beam', 5),
+            token_beam=getattr(args, 'token_beam', 2),
+            mask_beam=getattr(args, 'mask_beam', 1),
+            )
 
 
     def build_dataset_for_inference(self, src_tokens, src_lengths, tgt_tokens=None, tgt_lengths=None, num_source_inputs=1):

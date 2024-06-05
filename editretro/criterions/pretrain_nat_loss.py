@@ -34,7 +34,7 @@ class LabelSmoothedDualImitationCriterion_MLM(FairseqCriterion):
             help='epsilon for label smoothing, 0 means no label smoothing',
         )
 
-    def compute_masked_loss(self, targets, encoder_logits):
+    def compute_masked_loss(self, targets, encoder_logits, factor):
 
         assert encoder_logits.size(0) == targets.size(0), (
             encoder_logits.size(), targets.size())
@@ -44,8 +44,11 @@ class LabelSmoothedDualImitationCriterion_MLM(FairseqCriterion):
             reduction="mean",
             ignore_index=self.padding_idx,
         )
+        
+        loss = factor * loss
 
-        return {"name": 'lm_loss-loss', "loss": loss * 0.01, "factor": 0.01}
+        # return {"name": 'lm_loss-loss', "loss": loss * 0.01, "factor": 0.01}
+        return {"name": 'lm_loss-loss', "loss": loss, "factor": factor}
 
     def _compute_loss(self,
                       outputs,
@@ -118,8 +121,7 @@ class LabelSmoothedDualImitationCriterion_MLM(FairseqCriterion):
             sample["net_input"]["src_tokens"],
             sample["net_input"]["src_lengths"],
         )
-        tgt_tokens, prev_output_tokens = sample["target"], sample[
-            "prev_target"]
+        tgt_tokens, prev_output_tokens = sample["target"], sample["prev_target"]
 
         if 'masked_source' in sample:
             masked_source = sample['masked_source']
@@ -135,8 +137,10 @@ class LabelSmoothedDualImitationCriterion_MLM(FairseqCriterion):
 
         for obj in outputs:
             if obj == 'lm_loss' and masked_source != None:
-                _losses = self.compute_masked_loss(outputs[obj].get("tgt"),
-                                                   outputs[obj].get('out'))
+                _losses = self.compute_masked_loss(targets=outputs[obj].get("tgt"),
+                                                   encoder_logits=outputs[obj].get('out'),
+                                                   factor=outputs[obj].get('factor', 1.0),
+                                                   )
             else:
                 if outputs[obj].get("loss", None) is None:
                     _losses = self._compute_loss(

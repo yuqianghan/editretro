@@ -1,11 +1,12 @@
-# EditRetro: Advancing Retrosynthesis Prediction with Iterative Editing Model
+# EditRetro: Retrosynthesis Prediction with an Iterative String Editing Model
 
-The directory contains source code of the article: Advancing Retrosynthesis Prediction with Iterative Editing Model.
+The directory contains source code of the article: Retrosynthesis Prediction with an Iterative String Editing Model.
 
-In this work, we propose an sequence edit-based retrosynthesis prediction method, called EditRetro, which formulaltes single-step retrosynthesis as a molecular string editing task. EditRetro offers an interpretable prediction process by performing explicit Levenshtein sequence editing operations, starting from the target product string. 
+In this work, we propose an sequence edit-based retrosynthesis prediction method, called EditRetro, which formulaltes single-step retrosynthesis as a molecular string editing task. EditRetro offers an interpretable prediction process by performing explicit Levenshtein sequence editing operations, starting from the target product string.
 <div align=center>
-<img src=figures/model.png width="500px">
+<img src=figures/workflow.png width="550px">
 </div>
+
 
 ## Setup
 
@@ -43,7 +44,7 @@ sudo apt-get install ninja-build
 
    USPTO-50K: https://github.com/Hanjun-Dai/GLN  (schneider50k)
 
-   USPTO-MIT: https://github.com/wengong-jin/nips17-rexgen/blob/master/USPTO/data.zip
+   <!-- USPTO-MIT: https://github.com/wengong-jin/nips17-rexgen/blob/master/USPTO/data.zip -->
 
    USPTO-FULL: https://github.com/Hanjun-Dai/GLN  (1976_Sep2016_USPTOgrants_smiles.rsmi or uspto_multi)
 
@@ -52,71 +53,57 @@ sudo apt-get install ninja-build
 Download **raw** datasets and put them in the _editretro/datasets/XXX(e.g., USPTO_50K)/raw_ folder, and then run the command to get the preprocessed datasets which will be stored in _editretro/datasets/XXX/aug_:
 
 ```python
-    cd editretro (the root directory of the project)
-    python ./preprocess/generate_aug_spe.py -dataset USPTO_50K -augmentation 10 -processes 8
-    python ./preprocess/generate_aug_spe.py -dataset USPTO-MIT -augmentation 5 -processes 8
-    python ./preprocess/generate_aug_spe.py -dataset USPTO_FULL -augmentation 5 -processes 8
+-  cd editretro (the root directory of the project)
+-  python preprocess_data.py -dataset USPTO_50K -augmentation 20 -processes 8 -spe -dropout 0 
+-  python preprocess_data.py -dataset USPTO_FULL -augmentation 5 -processes 8 -spe -dropout 0
 ```
 
 Then binarize the data using 
 ```shell
-sh ./preprocess/binarize.sh
+sh binarize.sh ../datasets/USPTO_50K/aug20 dict.txt
 ```
 
 
-## Pretrain and Finetune
-Pre-train on the augmented USPTO-FULL datasets with jointly masked modeling:
+## Traing the model
+#### Pretrain and Finetune
+Pretrain on the prepared specific dataset
 ```shell
-sh ./scripts/pretrain.sh
+sh ./scripts/0-pretrain.sh
 ```
-Fine-tune on specific dataset, for example, USPTO-50K:
+Finetune on specific dataset, for example, USPTO-50K:
 ```shell
-sh ./scripts/finetune.sh
-```
-The model can also be trained from scratch:
-```shell
-sh ./scripts/train_from_scratch.sh
+sh ./scripts/1-finetune.sh
 ```
 
 
 ## Inference
 To generate and score the predictions on the test set with binarized data:
 ```shell
-sh  ./scripts/generate.sh
+sh  ./scripts/3-generate.sh
 ```
-or with raw text data:
-```shell
-sh ./scripts/interactive.sh
-```
-You will get the output like this:
-<div align=center>
-<img src=figures/output.png width="300px">
-</div>
-
-
 
 Our method achieves the state-of-the-art performance on the USPTO-50K dataset. 
 <div align=center>
-<img src=figures/results.png width="400px">
+<img src=figures/USPTO-50K.png width="400px">
 </div>
 
 ## Inference with our prepared checkpoint
-After download the checkpoint pretrained on USPTO-FULL and then finetuned on USPTO-50K https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing, you can edit your own molecule:
+After download the checkpoints on USPTO-50K and USPTO-FULL https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing, you can edit your own molecule.
 ```shell
-sh ./scripts/interactive_single.sh
+sh ./scripts/3-generate.sh
 ```
 
 
-<!-- 
+
 ## Citation
 ```
 @article{han2023editretro,
-	title={Explainable and Diverse Retrosynthesis Prediction via Generative Editing Model},
+	title={Retrosynthesis Prediction with an Iterative String Editing Model},
 	author={Han, Yuqiang et al.},
 	journal={},
-	year={2023}
+	year={2024}
 }
-``` -->
+```
 
 ## Reference
 Our code is based on facebook fairseq-0.9.0 version modified from https://github.com/weijia-xu/fairseq-editor and https://github.com/nedashokraneh/fairseq-editor.

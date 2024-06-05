@@ -12,18 +12,25 @@ from tqdm import tqdm
 
 from rdkit import RDLogger
 
+import selfies as sf
+
 import codecs
 from SmilesPE.tokenizer import *
 
 RDLogger.DisableLog('rdApp.*')
 
 spe_vob = codecs.open('./SPE_ChEMBL.txt')
-spe_tokenizer = SPE_Tokenizer(spe_vob)
+spe_tokenizer = SPE_Tokenizer(spe_vob, merges=-1)
+# spe_tokenizer = SPE_Tokenizer(spe_vob, merges=1272) # frequency >= 6000
+# spe_tokenizer = SPE_Tokenizer(spe_vob, merges=1020) # frequency >= 8000
+# spe_tokenizer = SPE_Tokenizer(spe_vob, merges=835) # frequency >= 10000
 
 
-def smi_tokenizer(smi, spe=True):
+def smi_tokenizer(smi, spe=False, self=False, dropout=0): # dropout:  bpe dropout
     if spe:
-        return spe_tokenizer.tokenize(smi)
+        return spe_tokenizer.tokenize(smi, dropout=dropout)
+    elif self:
+        return ' '.join(sf.split_selfies(sf.encoder(smi)))
     pattern = "(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9])"
     regex = re.compile(pattern)
     tokens = [token for token in regex.findall(smi)]
@@ -189,12 +196,11 @@ def multi_process(data):
     """finishing checking data quality"""
 
     if return_status['status'] == 0:
-        pro_atom_map_numbers = list(map(int, re.findall(r"(?<=:)\d+",
-                                                        product)))
+        pro_atom_map_numbers = list(map(int, re.findall(r"(?<=:)\d+", product)))
         reactant = reactant.split(".")
 
         if data['root_aligned']:
-            reversable = False  # no shuffle
+            reversable = False   # no shuffle # TODO:
             if augmentation == 999:
                 product_roots = pro_atom_map_numbers
                 times = len(product_roots)
@@ -256,32 +262,37 @@ def multi_process(data):
                 if shuffle:
                     random.shuffle(aligned_reactants)
                 reactant_smi = ".".join(aligned_reactants)
-                product_tokens = smi_tokenizer(pro_smi, args.spe)
-                reactant_tokens = smi_tokenizer(reactant_smi, args.spe)
+                product_tokens = smi_tokenizer(pro_smi, args.spe, args.self, args.dropout)
+                reactant_tokens = smi_tokenizer(reactant_smi, args.spe, args.self, args.dropout)
 
                 return_status['src_data'].append(product_tokens)
                 return_status['tgt_data'].append(reactant_tokens)
 
                 if mixed:
                     return_status['src_data'].append(
-                        smi_tokenizer(rea_smi, args.spe))
+                        smi_tokenizer(rea_smi, args.spe, args.self, args.dropout))
                     return_status['tgt_data'].append(
-                        smi_tokenizer(pro_smi, args.spe))
+                        smi_tokenizer(pro_smi, args.spe, args.self, args.dropout))
 
                 if reversable:
 
-                    aligned_reactants.reverse()
+                    # aligned_reactants.reverse()
+                    # pro_smi = ''.join(reversed(pro_smi))
                     reactant_smi = ".".join(aligned_reactants)
-                    product_tokens = smi_tokenizer(pro_smi, args.spe)
-                    reactant_tokens = smi_tokenizer(reactant_smi, args.spe)
+                    product_tokens = smi_tokenizer(pro_smi, args.spe, args.self, args.dropout)
+                    reactant_tokens = smi_tokenizer(reactant_smi, args.spe, args.self, args.dropout)
+                    # return_status['src_data'].append(product_tokens)
+                    product_tokens_list = product_tokens.split(' ')
+                    product_tokens_list.reverse()
+                    product_tokens = ' '.join(product_tokens_list)
                     return_status['src_data'].append(product_tokens)
                     return_status['tgt_data'].append(reactant_tokens)
 
                     if mixed:
                         return_status['src_data'].append(
-                            smi_tokenizer(rea_smi, args.spe))
+                            smi_tokenizer(rea_smi, args.spe, args.self, args.dropout))
                         return_status['tgt_data'].append(
-                            smi_tokenizer(pro_smi, args.spe))
+                            smi_tokenizer(pro_smi, args.spe, args.self, args.dropout))
 
         else:
             cano_product = clear_map_canonical_smiles(product)
@@ -291,9 +302,9 @@ def multi_process(data):
                     & set(pro_atom_map_numbers)) > 0
             ])
             return_status['src_data'].append(
-                smi_tokenizer(cano_product, args.spe))
+                smi_tokenizer(cano_product, args.spe, args.self, args.dropout))
             return_status['tgt_data'].append(
-                smi_tokenizer(cano_reactanct, args.spe))
+                smi_tokenizer(cano_reactanct, args.spe, args.self, args.dropout))
             pro_mol = Chem.MolFromSmiles(cano_product)
             rea_mols = [
                 Chem.MolFromSmiles(rea) for rea in cano_reactanct.split(".")
@@ -308,15 +319,15 @@ def multi_process(data):
                     random.shuffle(rea_smi)
                 rea_smi = ".".join(rea_smi)
                 return_status['src_data'].append(
-                    smi_tokenizer(pro_smi, args.spe))
+                    smi_tokenizer(pro_smi, args.spe, args.self, args.dropout))
                 return_status['tgt_data'].append(
-                    smi_tokenizer(rea_smi, args.spe))
+                    smi_tokenizer(rea_smi, args.spe, args.self, args.dropout))
 
                 if mixed:
                     return_status['src_data'].append(
-                        smi_tokenizer(rea_smi, args.spe))
+                        smi_tokenizer(rea_smi, args.spe, args.self, args.dropout))
                     return_status['tgt_data'].append(
-                        smi_tokenizer(pro_smi, args.spe))
+                        smi_tokenizer(pro_smi, args.spe, args.self, args.dropout))
         edit_distances = []
         for src, tgt in zip(return_status['src_data'],
                             return_status['tgt_data']):
@@ -329,7 +340,7 @@ def multi_process(data):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-dataset', type=str, default='USPTO_50K')
-    parser.add_argument("-augmentation", type=int, default=10)
+    parser.add_argument("-augmentation", type=int, default=20)
     parser.add_argument("-seed", type=int, default=33)
     parser.add_argument("-processes", type=int, default=-1)
     parser.add_argument("-test_only", action="store_true")
@@ -340,6 +351,8 @@ if __name__ == '__main__':
     parser.add_argument("-canonical", action="store_true")
     parser.add_argument("-postfix", type=str, default="")
     parser.add_argument('-spe', action="store_true")
+    parser.add_argument('-self', action="store_true")
+    parser.add_argument('-dropout', type=float, default=0.0)
     parser.add_argument('-shuffle', action='store_true')
     parser.add_argument('-mixed', action='store_true')
     args = parser.parse_args()
@@ -360,8 +373,8 @@ if __name__ == '__main__':
     random.seed(args.seed)
 
     if args.dataset == "USPTO-MIT":
-        datadir = './datasets/{}/raw'.format(args.dataset)
-        savedir = './datasets/{}/aug{}'.format(
+        datadir = '../datasets/{}/raw'.format(args.dataset)
+        savedir = '../datasets/{}/aug{}'.format(
             args.dataset, args.augmentation)
         savedir += args.postfix
         if not os.path.exists(savedir):
@@ -408,9 +421,13 @@ if __name__ == '__main__':
                 )
 
     else:
-        datadir = './datasets/{}/raw'.format(args.dataset)
-        savedir = './datasets/{}/aug{}'.format(
-            args.dataset, args.augmentation)
+        datadir = '../datasets/{}/raw'.format(args.dataset)
+        if args.spe:
+            savedir = '../datasets/{}/aug{}'.format(args.dataset, args.augmentation)
+        elif args.self:
+            savedir = '../datasets/{}/aug{}_self'.format(args.dataset, args.augmentation)
+        else:
+            savedir = '../datasets/{}/aug{}_token'.format(args.dataset, args.augmentation)
 
         savedir += args.postfix
         if not os.path.exists(savedir):
