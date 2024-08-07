@@ -79,7 +79,7 @@ sh ./scripts/1-finetune.sh
 ## Inference
 To generate and score the predictions on the test set with binarized data:
 ```shell
-sh  ./scripts/3-generate.sh
+sh  ./scripts/2-generate.sh
 ```
 
 Our method achieves the state-of-the-art performance on the USPTO-50K dataset. 
@@ -88,19 +88,20 @@ Our method achieves the state-of-the-art performance on the USPTO-50K dataset.
 </div>
 
 ## Inference with our prepared checkpoint
-After download the checkpoints on USPTO-50K and USPTO-FULL https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing, you can edit your own molecule.
+After download the checkpoints on USPTO-50K and USPTO-FULL https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing, you can edit your own molecule following the ./interactive/README
 ```shell
-sh ./scripts/3-generate.sh
+sh ./interactive/interactive_gen.sh
 ```
+
 
 
 
 ## Citation
 ```
-@article{han2023editretro,
+@article{han2024editretro,
 	title={Retrosynthesis Prediction with an Iterative String Editing Model},
 	author={Han, Yuqiang et al.},
-	journal={},
+	journal={nature communications},
 	year={2024}
 }
 ```
