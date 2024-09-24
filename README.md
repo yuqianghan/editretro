@@ -30,13 +30,15 @@ cd  editretro/fairseq
 pip install --editable ./
 ```
 
-&nbsp;&nbsp;&nbsp; Remarks: 
+&nbsp;&nbsp;&nbsp; **Remarks**: 
 1. Set export CUDA_HOME=/usr/local/cuda in .bashrc;
-2. To ensure a successful installation of fairseq, please make sure to install Ninja first.
+2. Please verify the versions of CUDA (11.6.0) and gcc (9.4.0);
+3. To ensure a successful installation of fairseq, please make sure to install Ninja first.
 ```
 sudo apt install re2c
 sudo apt-get install ninja-build
 ```
+4. If installed successfully, a file named _fairseq/fairseq/libnat_cuda.cpython-310-x86_64-linux-gnu.so should have been generated.
 
 
 ## Preprocess data
@@ -53,9 +55,9 @@ sudo apt-get install ninja-build
 Download **raw** datasets and put them in the _editretro/datasets/XXX(e.g., USPTO_50K)/raw_ folder, and then run the command to get the preprocessed datasets which will be stored in _editretro/datasets/XXX/aug_:
 
 ```python
--  cd editretro (the root directory of the project)
--  python preprocess_data.py -dataset USPTO_50K -augmentation 20 -processes 8 -spe -dropout 0 
--  python preprocess_data.py -dataset USPTO_FULL -augmentation 5 -processes 8 -spe -dropout 0
+-  cd editretro/preprocess
+-  python preprocess_data.py -dataset USPTO_50K -augmentation 20 -processes 64 -spe -dropout 0 
+-  python preprocess_data.py -dataset USPTO_FULL -augmentation 5 -processes 64 -spe -dropout 0
 ```
 
 Then binarize the data using 
@@ -65,30 +67,31 @@ sh binarize.sh ../datasets/USPTO_50K/aug20 dict.txt
 
 
 ## Traing the model
-#### Pretrain and Finetune
-Pretrain on the prepared specific dataset
-```shell
-sh ./scripts/0-pretrain.sh
+<!-- #### Pretrain and Finetune -->
+To pretrain the model on the prepared dataset, please follow the instructions in **scripts/pretrain_readme.md**.
+
+To finetune on specific dataset, please use **scripts/1_finetune_50k.sh** and **scripts/1_finetune_full.sh**
 ```
-Finetune on specific dataset, for example, USPTO-50K:
-```shell
-sh ./scripts/1-finetune.sh
+cd editretro (the root dicrectory)
+sh ./scripts/1_finetune_50k.sh   or
+sh ./scripts/1_finetune_full.sh
 ```
 
 
 ## Inference
 To generate and score the predictions on the test set with binarized data:
 ```shell
-sh  ./scripts/2-generate.sh
+sh  ./scripts/2_generate_50k.sh  or
+sh  ./scripts/2_generate_full.sh
 ```
-
+s
 Our method achieves the state-of-the-art performance on the USPTO-50K dataset. 
 <div align=center>
 <img src=figures/USPTO-50K.png width="400px">
 </div>
 
 ## Inference with our prepared checkpoint
-After download the checkpoints on USPTO-50K and USPTO-FULL https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing, you can edit your own molecule following the ./interactive/README
+After download the checkpoints on USPTO-50K and USPTO-FULL https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing, you can edit your own molecule following the _**interactive/README**_
 ```shell
 sh ./interactive/interactive_gen.sh
 ```

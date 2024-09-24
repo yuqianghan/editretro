@@ -21,9 +21,6 @@ RDLogger.DisableLog('rdApp.*')
 
 spe_vob = codecs.open('./SPE_ChEMBL.txt')
 spe_tokenizer = SPE_Tokenizer(spe_vob, merges=-1)
-# spe_tokenizer = SPE_Tokenizer(spe_vob, merges=1272) # frequency >= 6000
-# spe_tokenizer = SPE_Tokenizer(spe_vob, merges=1020) # frequency >= 8000
-# spe_tokenizer = SPE_Tokenizer(spe_vob, merges=835) # frequency >= 10000
 
 
 def smi_tokenizer(smi, spe=False, self=False, dropout=0): # dropout:  bpe dropout
@@ -121,6 +118,7 @@ def preprocess(save_dir,
         'empty_r': 0,
     }
     processes = multiprocessing.cpu_count() if processes < 0 else processes
+    print('processors: ', processes)
     pool = multiprocessing.Pool(processes=processes)
     results = pool.map(func=multi_process, iterable=data)
     pool.close()
@@ -144,7 +142,8 @@ def preprocess(save_dir,
     print('size', len(src_data))
     for key, value in skip_dict.items():
         print(f"{key}:{value},{value/len(reactants)}")
-    if augmentation != 999:
+    # if augmentation != 999:
+    if augmentation > 0:
         with open(os.path.join(save_dir, '{}.src'.format(set_name)), 'w') as f:
             for src in src_data:
                 f.write('{}\n'.format(src))
@@ -346,6 +345,7 @@ if __name__ == '__main__':
     parser.add_argument("-test_only", action="store_true")
     parser.add_argument("-train_only", action="store_true")
     parser.add_argument("-test_except", action="store_true")
+    parser.add_argument("-train_except", action="store_true")
     parser.add_argument("-validastrain", action="store_true")
     parser.add_argument("-character", action="store_true")
     parser.add_argument("-canonical", action="store_true")
@@ -355,9 +355,10 @@ if __name__ == '__main__':
     parser.add_argument('-dropout', type=float, default=0.0)
     parser.add_argument('-shuffle', action='store_true')
     parser.add_argument('-mixed', action='store_true')
+    parser.add_argument('-samples', type=int, default=-1)
     args = parser.parse_args()
     print('preprocessing dataset {}...'.format(args.dataset))
-    assert args.dataset in ['USPTO_50K', 'USPTO_FULL', 'USPTO-MIT']
+    assert args.dataset in ['USPTO_50K', 'USPTO_FULL']
     print(args)
     if args.test_only:
         datasets = ['test']
@@ -365,6 +366,8 @@ if __name__ == '__main__':
         datasets = ['train']
     elif args.test_except:
         datasets = ['val', 'train']
+    elif args.train_except:
+        datasets = ['val', 'test']
     elif args.validastrain:
         datasets = ['test', 'val', 'train']
     else:
@@ -372,115 +375,71 @@ if __name__ == '__main__':
 
     random.seed(args.seed)
 
-    if args.dataset == "USPTO-MIT":
-        datadir = '../datasets/{}/raw'.format(args.dataset)
-        savedir = '../datasets/{}/aug{}'.format(
-            args.dataset, args.augmentation)
-        savedir += args.postfix
-        if not os.path.exists(savedir):
-            os.makedirs(savedir)
-        for i, data_set in enumerate(datasets):
-            with open(os.path.join(datadir, f"{data_set}.txt"), "r") as f:
-                reaction_list = f.readlines()
-                if args.validastrain and data_set == "train":
-                    with open(os.path.join(datadir, f"valid.txt"), "r") as f:
-                        reaction_list += f.readlines()
-
-                reactant_smarts_list = list(
-                    map(lambda x: x.split('>>')[0], reaction_list))
-                product_smarts_list = list(
-                    map(lambda x: x.split('>>')[1], reaction_list))
-                product_smarts_list = list(
-                    map(lambda x: x.split(' ')[0], product_smarts_list))
-                save_dir = os.path.join(savedir, data_set)
-
-                multiple_product_indices = [
-                    i for i in range(len(product_smarts_list))
-                    if "." in product_smarts_list[i]
-                ]
-                for index in multiple_product_indices:
-                    products = product_smarts_list[index].split(".")
-                    for product in products:
-                        reactant_smarts_list.append(
-                            reactant_smarts_list[index])
-                        product_smarts_list.append(product)
-                for index in multiple_product_indices[::-1]:
-                    del reactant_smarts_list[index]
-                    del product_smarts_list[index]
-
-                src_data, tgt_data = preprocess(
-                    save_dir,
-                    reactant_smarts_list,
-                    product_smarts_list,
-                    data_set,
-                    args.augmentation,
-                    reaction_types=None,
-                    root_aligned=not args.canonical,
-                    character=args.character,
-                    processes=args.processes,
-                )
-
+    datadir = '../datasets/{}/raw'.format(args.dataset)
+    if args.spe:
+        savedir = '../datasets/{}/aug{}'.format(args.dataset, args.augmentation)
+    elif args.self:
+        savedir = '../datasets/{}/aug{}_self'.format(args.dataset, args.augmentation)
     else:
-        datadir = '../datasets/{}/raw'.format(args.dataset)
-        if args.spe:
-            savedir = '../datasets/{}/aug{}'.format(args.dataset, args.augmentation)
-        elif args.self:
-            savedir = '../datasets/{}/aug{}_self'.format(args.dataset, args.augmentation)
+        savedir = '../datasets/{}/aug{}_token'.format(args.dataset, args.augmentation)
+
+    savedir += args.postfix
+    if not os.path.exists(savedir):
+        os.makedirs(savedir)
+    for i, data_set in enumerate(datasets):
+        csv_path = f"{datadir}/raw_{data_set}.csv"
+        csv = pd.read_csv(csv_path)
+        # reaction_list = list(csv["reactants>reagents>production"])
+        if args.samples > 0:
+            reaction_list = random.sample(list(csv["reactants>reagents>production"]), args.samples)
         else:
-            savedir = '../datasets/{}/aug{}_token'.format(args.dataset, args.augmentation)
-
-        savedir += args.postfix
-        if not os.path.exists(savedir):
-            os.makedirs(savedir)
-        for i, data_set in enumerate(datasets):
-            csv_path = f"{datadir}/raw_{data_set}.csv"
-            csv = pd.read_csv(csv_path)
             reaction_list = list(csv["reactants>reagents>production"])
-            if args.validastrain and data_set == "train":
-                csv_path = f"{datadir}/raw_val.csv"
-                csv = pd.read_csv(csv_path)
-                reaction_list += list(csv["reactants>reagents>production"])
+        
+        if args.validastrain and data_set == "train":
+            csv_path = f"{datadir}/raw_val.csv"
+            csv = pd.read_csv(csv_path)
+            reaction_list += list(csv["reactants>reagents>production"])
 
-            # random.shuffle(reaction_list)
-            reactant_smarts_list = list(
-                map(lambda x: x.split('>')[0], reaction_list))
-            reactant_smarts_list = list(
-                map(lambda x: x.split(' ')[0], reactant_smarts_list))
-            reagent_smarts_list = list(
-                map(lambda x: x.split('>')[1], reaction_list))
-            product_smarts_list = list(
-                map(lambda x: x.split('>')[2], reaction_list))
-            product_smarts_list = list(
-                map(lambda x: x.split(' ')[0],
-                    product_smarts_list))  # remove ' |f:1...'
-            print("Total Data Size", len(reaction_list))
+        # random.shuffle(reaction_list)
+        reactant_smarts_list = list(
+            map(lambda x: x.split('>')[0], reaction_list))
+        reactant_smarts_list = list(
+            map(lambda x: x.split(' ')[0], reactant_smarts_list))
+        reagent_smarts_list = list(
+            map(lambda x: x.split('>')[1], reaction_list))
+        product_smarts_list = list(
+            map(lambda x: x.split('>')[2], reaction_list))
+        product_smarts_list = list(
+            map(lambda x: x.split(' ')[0],
+                product_smarts_list))  # remove ' |f:1...'
+        print("Total Data Size", len(reaction_list))
 
-            # reaction_class_list = list(map(lambda x: int(x) - 1, csv['class']))
-            sub_react_list = reactant_smarts_list
-            sub_prod_list = product_smarts_list
-            # save_dir = os.path.join(savedir, data_set)
-            save_dir = savedir
+        # reaction_class_list = list(map(lambda x: int(x) - 1, csv['class']))
+        sub_react_list = reactant_smarts_list
+        sub_prod_list = product_smarts_list
+        # save_dir = os.path.join(savedir, data_set)
+        save_dir = savedir
 
-            # duplicate multiple product reactions into multiple ones with one product each
-            multiple_product_indices = [
-                i for i in range(len(sub_prod_list)) if "." in sub_prod_list[i]
-            ]
-            for index in multiple_product_indices:
-                products = sub_prod_list[index].split(".")
-                for product in products:
-                    sub_react_list.append(sub_react_list[index])
-                    sub_prod_list.append(product)
-            for index in multiple_product_indices[::-1]:
-                del sub_react_list[index]
-                del sub_prod_list[index]
-            src_data, tgt_data = preprocess(
-                save_dir,
-                sub_react_list,
-                sub_prod_list,
-                data_set,
-                args.augmentation,
-                reaction_types=None,
-                root_aligned=not args.canonical,
-                character=args.character,
-                processes=args.processes,
-            )
+        # duplicate multiple product reactions into multiple ones with one product each
+        multiple_product_indices = [
+            i for i in range(len(sub_prod_list)) if "." in sub_prod_list[i]
+        ]
+        for index in multiple_product_indices:
+            products = sub_prod_list[index].split(".")
+            for product in products:
+                sub_react_list.append(sub_react_list[index])
+                sub_prod_list.append(product)
+        for index in multiple_product_indices[::-1]:
+            del sub_react_list[index]
+            del sub_prod_list[index]
+        src_data, tgt_data = preprocess(
+            save_dir,
+            sub_react_list,
+            sub_prod_list,
+            data_set,
+            args.augmentation,
+            reaction_types=None,
+            root_aligned=not args.canonical,
+            character=args.character,
+            processes=args.processes,
+        )

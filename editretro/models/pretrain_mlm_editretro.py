@@ -113,15 +113,8 @@ class Pretrain_MLM_EditRetro(FairseqNATModel):
 
         encoder_out = self.encoder(src_tokens, src_lengths=src_lengths, masked_tokens=masked_tokens, **kwargs)
 
-        masked_tgt_masks, masked_tgt_tokens, mask_ins_targets = _get_advanced_ins_targets(
+        masked_tgt_masks, masked_tgt_tokens, _ = _get_advanced_ins_targets(
             prev_output_tokens, tgt_tokens, self.pad, self.unk)
-
-        mask_ins_targets = mask_ins_targets.clamp(min=0, max=255)  # for safe prediction
-        mask_ins_masks = prev_output_tokens[:, 1:].ne(self.pad)
-
-        mask_ins_out, _ = self.decoder.forward_mask_ins(normalize=False,
-                                                        prev_output_tokens=prev_output_tokens,
-                                                        encoder_out=encoder_out)
 
         word_ins_out, _ = self.decoder.forward_word_ins(normalize=False,
                                                         prev_output_tokens=masked_tgt_tokens,
@@ -129,12 +122,6 @@ class Pretrain_MLM_EditRetro(FairseqNATModel):
 
         if masked_source == None:
             return {
-                "mask_ins": {
-                    "out": mask_ins_out,
-                    "tgt": mask_ins_targets,
-                    "mask": mask_ins_masks,
-                    "ls": 0.01,
-                },
                 "word_ins_ml": {
                     "out": word_ins_out,
                     "tgt": tgt_tokens,
@@ -146,12 +133,6 @@ class Pretrain_MLM_EditRetro(FairseqNATModel):
             }
 
         return {
-            "mask_ins": {
-                "out": mask_ins_out,
-                "tgt": mask_ins_targets,
-                "mask": mask_ins_masks,
-                "ls": 0.01,
-            },
             "word_ins_ml": {
                 "out": word_ins_out,
                 "tgt": tgt_tokens,
