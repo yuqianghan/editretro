@@ -87,7 +87,7 @@ sh  ./scripts/2_generate_full.sh
 s
 Our method achieves the state-of-the-art performance on the USPTO-50K dataset. 
 <div align=center>
-<img src=figures/USPTO-50K.png width="400px">
+<img src=figures/results.png width="600px">
 </div>
 
 ## Inference with our prepared checkpoint

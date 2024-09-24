@@ -1,25 +1,31 @@
 #!/bin/bash
 
-gpus=$1
+gpus="0"
 aug=20
 topk=20
 beam_size=20
-outfile=generation
+repos_beam=5
+mask_beam=1
+token_beam=4
+max_tokens=2000   #!!!TODO: reduce this number if encountering CUDA OOM
 
 databin=./datasets/USPTO_50K/aug20/data-bin  # binaried test data
-root_dir=results/finetune # the path to  the generation results
+root_dir=results/finetune_50k/xxxxxxxx_xxxxxx  #TODO: point to the pretrain checkpoint path
 model_dir=${root_dir}/checkpoints
-outputdir=${root_dir}/generations
+
+exp_n=1
+outfile=generation
+outputdir=${root_dir}/generations/$exp_n
 mkdir -p $outputdir
 
-ckpt_name=checkpoint_finetune.pt
-ckpt_path=${model_dir}/${ckpt_name}
+ckpt_name=finetune.pt
+ckpt_path=${outputdir}/${ckpt_name}
 
 python ./utils/average_checkpoints.py --inputs ${model_dir} \
     --output ${ckpt_path} \
-    --num-update-checkpoints 5  \
-    # --num-epoch-checkpoints 10 \
-
+    --num-epoch-checkpoints 5 \
+	# --checkpoint-upper-bound 50 \
+    # --num-update-checkpoints 3  \
 
 CUDA_VISIBLE_DEVICES=$gpus CUDA_LAUNCH_BLOCKING=1 fairseq-generate \
 	--user-dir editretro \
@@ -29,14 +35,15 @@ CUDA_VISIBLE_DEVICES=$gpus CUDA_LAUNCH_BLOCKING=1 fairseq-generate \
 	--task translation_retro \
 	--path ${ckpt_path} \
 	--iter-decode-max-iter 10 \
-	--iter-decode-eos-penalty 1 \
+	--iter-decode-eos-penalty 0 \
 	--beam 1 --remove-bpe \
 	--init-src \
 	--TOPK ${beam_size} \
-	--max-tokens 50000 \
-	--repos-beam 5 \
-	--mask-beam 1 \
-	--token-beam 4 \
+	--max-tokens ${max_tokens} \
+	--repos-beam ${repos_beam} \
+	--mask-beam ${mask_beam} \
+	--token-beam ${token_beam} \
+	--fp16 \
 	--print-step --retain-iter-history >$outputdir/${outfile}.txt \
 
 
