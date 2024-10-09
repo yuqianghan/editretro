@@ -144,11 +144,11 @@ def preprocess(save_dir,
         print(f"{key}:{value},{value/len(reactants)}")
     # if augmentation != 999:
     if augmentation > 0:
-        with open(os.path.join(save_dir, '{}.src'.format(set_name)), 'w') as f:
+        with open(os.path.join(save_dir, '{}.src'.format(set_name)), 'a') as f:
             for src in src_data:
                 f.write('{}\n'.format(src))
 
-        with open(os.path.join(save_dir, '{}.tgt'.format(set_name)), 'w') as f:
+        with open(os.path.join(save_dir, '{}.tgt'.format(set_name)), 'a') as f:
             for tgt in tgt_data:
                 f.write('{}\n'.format(tgt))
     return src_data, tgt_data
@@ -356,6 +356,7 @@ if __name__ == '__main__':
     parser.add_argument('-shuffle', action='store_true')
     parser.add_argument('-mixed', action='store_true')
     parser.add_argument('-samples', type=int, default=-1)
+    parser.add_argument('-batch', type=int, default=-1)
     args = parser.parse_args()
     print('preprocessing dataset {}...'.format(args.dataset))
     assert args.dataset in ['USPTO_50K', 'USPTO_FULL']
@@ -400,46 +401,56 @@ if __name__ == '__main__':
             csv = pd.read_csv(csv_path)
             reaction_list += list(csv["reactants>reagents>production"])
 
-        # random.shuffle(reaction_list)
-        reactant_smarts_list = list(
-            map(lambda x: x.split('>')[0], reaction_list))
-        reactant_smarts_list = list(
-            map(lambda x: x.split(' ')[0], reactant_smarts_list))
-        reagent_smarts_list = list(
-            map(lambda x: x.split('>')[1], reaction_list))
-        product_smarts_list = list(
-            map(lambda x: x.split('>')[2], reaction_list))
-        product_smarts_list = list(
-            map(lambda x: x.split(' ')[0],
-                product_smarts_list))  # remove ' |f:1...'
-        print("Total Data Size", len(reaction_list))
+        iters = int(len(reaction_list) / args.batch) if args.batch > 0 else 1
 
-        # reaction_class_list = list(map(lambda x: int(x) - 1, csv['class']))
-        sub_react_list = reactant_smarts_list
-        sub_prod_list = product_smarts_list
-        # save_dir = os.path.join(savedir, data_set)
-        save_dir = savedir
+        for k in range(iters+1):
+            print('*' * 20)
+            print('start iter ', k)
+            if k < iters:
+                rection_list_tmp = reaction_list[k * args.batch : (k+1) * args.batch]
+            else:
+                rection_list_tmp = reaction_list[k * args.batch : ]
 
-        # duplicate multiple product reactions into multiple ones with one product each
-        multiple_product_indices = [
-            i for i in range(len(sub_prod_list)) if "." in sub_prod_list[i]
-        ]
-        for index in multiple_product_indices:
-            products = sub_prod_list[index].split(".")
-            for product in products:
-                sub_react_list.append(sub_react_list[index])
-                sub_prod_list.append(product)
-        for index in multiple_product_indices[::-1]:
-            del sub_react_list[index]
-            del sub_prod_list[index]
-        src_data, tgt_data = preprocess(
-            save_dir,
-            sub_react_list,
-            sub_prod_list,
-            data_set,
-            args.augmentation,
-            reaction_types=None,
-            root_aligned=not args.canonical,
-            character=args.character,
-            processes=args.processes,
-        )
+            # random.shuffle(reaction_list)
+            reactant_smarts_list = list(
+                map(lambda x: x.split('>')[0], reaction_list))
+            reactant_smarts_list = list(
+                map(lambda x: x.split(' ')[0], reactant_smarts_list))
+            reagent_smarts_list = list(
+                map(lambda x: x.split('>')[1], reaction_list))
+            product_smarts_list = list(
+                map(lambda x: x.split('>')[2], reaction_list))
+            product_smarts_list = list(
+                map(lambda x: x.split(' ')[0],
+                    product_smarts_list))  # remove ' |f:1...'
+            print("Total Data Size", len(reaction_list))
+
+            # reaction_class_list = list(map(lambda x: int(x) - 1, csv['class']))
+            sub_react_list = reactant_smarts_list
+            sub_prod_list = product_smarts_list
+            # save_dir = os.path.join(savedir, data_set)
+            save_dir = savedir
+
+            # duplicate multiple product reactions into multiple ones with one product each
+            multiple_product_indices = [
+                i for i in range(len(sub_prod_list)) if "." in sub_prod_list[i]
+            ]
+            for index in multiple_product_indices:
+                products = sub_prod_list[index].split(".")
+                for product in products:
+                    sub_react_list.append(sub_react_list[index])
+                    sub_prod_list.append(product)
+            for index in multiple_product_indices[::-1]:
+                del sub_react_list[index]
+                del sub_prod_list[index]
+            src_data, tgt_data = preprocess(
+                save_dir,
+                sub_react_list,
+                sub_prod_list,
+                data_set,
+                args.augmentation,
+                reaction_types=None,
+                root_aligned=not args.canonical,
+                character=args.character,
+                processes=args.processes,
+            )
