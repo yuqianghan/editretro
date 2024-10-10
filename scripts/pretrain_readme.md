@@ -27,6 +27,8 @@ bash binarize.sh ../datasets/USPTO_Pretrain/pretrain dict.txt
 bash ./scripts/0_pretrain.sh
 ```
 
+> You can download the pre-trained checkpoint with 1000K updates from https://drive.google.com/file/d/12kLcr7R0oBcsgqOSvgZAQk9a6EEkyW8S/view?usp=drive_link.
+
 > Remark: To fully leverage the diversity of the USPTO_FULL dataset, we employed a 10x augmentation of the training set to pretrain the model. To prevent any potential data leakage, we implemented the following solutions:
 1. We filtered out the product molecules from the USPTO_50K test set.
 2. We exclusively pretrained the Token Decoder out of the three (reposition, placeholder, and token decoders).
