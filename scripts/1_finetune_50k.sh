@@ -24,18 +24,22 @@ mkdir -p ${model_dir}
 
 databin=datasets/USPTO_50K/aug20/data-bin
 
-pretrain_ckpt_path=results/pretrain/xxxxxxxx_xxxxxx/checkpoints  #TODO: point to the pretrain checkpoint path
-ckpt_name=${pretrain_ckpt_path}/pretrain.pt
+### If you run the 0_pretrain.sh script, uncomment the code to process the pretrained checkpoint
+# pretrain_ckpt_path=results/pretrain/xxxxxxxx_xxxxxx/checkpoints  #TODO: point to the pretrain checkpoint path
+# ckpt_name=${pretrain_ckpt_path}/pretrain.pt
 
-python utils/average_checkpoints.py --inputs ${pretrain_ckpt_path} \
-    --output ${ckpt_name} \
-	--num-update-checkpoints 5 \
-    # --num-epoch-checkpoints 10 \
-	# --checkpoint-upper-bound 10 \
+# python utils/average_checkpoints.py --inputs ${pretrain_ckpt_path} \
+#     --output ${ckpt_name} \
+# 	--num-update-checkpoints 5 \
+#     # --num-epoch-checkpoints 10 \
+# 	# --checkpoint-upper-bound 10 \
 
-python utils/pretrain_ckpt_utils.py \
-	--inputckpt ${ckpt_name} \
-	--outputckpt ${ckpt_name}
+# python utils/pretrain_ckpt_utils.py \
+# 	--inputckpt ${ckpt_name} \
+# 	--outputckpt ${ckpt_name}
+
+### Point to the processed pretrained checkpoint
+ckpt_name=/xxxxxx/pretrain.pt   #TODO: point to the pretrain checkpoint path
 
 gpu_ids=$(echo $gpus | sed "s/,/ /g")
 gpu_n=$(echo ${gpu_ids} | wc -w)
