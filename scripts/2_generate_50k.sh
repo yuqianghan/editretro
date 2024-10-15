@@ -21,11 +21,11 @@ mkdir -p $outputdir
 ckpt_name=finetune.pt
 ckpt_path=${outputdir}/${ckpt_name}
 
+###!!!TODO: average multiple (dozens of) checkpoints to get better performance
 python ./utils/average_checkpoints.py --inputs ${model_dir} \
     --output ${ckpt_path} \
-    --num-epoch-checkpoints 5 \
-	# --checkpoint-upper-bound 50 \
-    # --num-update-checkpoints 3  \
+    --num-epoch-checkpoints 40 \
+	--checkpoint-upper-bound 40 \
 
 CUDA_VISIBLE_DEVICES=$gpus CUDA_LAUNCH_BLOCKING=1 fairseq-generate \
 	--user-dir editretro \
