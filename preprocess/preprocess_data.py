@@ -157,13 +157,13 @@ def preprocess(save_dir,
 def multi_process(data):
     shuffle = args.shuffle  #False
     mixed = args.mixed  #False
-    pt = re.compile(r':(\d+)]')
     product = data['product']
     reactant = data['reactant']
     augmentation = data['augmentation']
     pro_mol = Chem.MolFromSmiles(product)
     rea_mol = Chem.MolFromSmiles(reactant)
     """checking data quality"""
+    pt = re.compile(r':(\d+)]')
     rids = sorted(re.findall(pt, reactant))
     pids = sorted(re.findall(pt, product))
     return_status = {
@@ -174,10 +174,11 @@ def multi_process(data):
     }
     # if ",".join(rids) != ",".join(pids):  # mapping is not 1:1
     #     return_status["status"] = "error_mapping"
-    # if len(set(rids)) != len(rids):  # mapping is not 1:1
-    #     return_status["status"] = "error_mapping"
-    # if len(set(pids)) != len(pids):  # mapping is not 1:1
-    #     return_status["status"] = "error_mapping"
+    if len(set(rids)) != len(rids):  # duplicate atom mapping
+        return_status["status"] = "error_mapping"
+    if len(set(pids)) != len(pids):  # duplicate atom mapping
+        return_status["status"] = "error_mapping"
+
     if "" == product:
         return_status["status"] = "empty_p"
     if "" == reactant:
