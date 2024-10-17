@@ -87,7 +87,7 @@ sh  ./scripts/2_generate_full.sh
 
 You can use your own trained checkpoint or use our prepared one available at https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing. Refer to the 2_generate_xxx.sh script to specify the checkpoint.
 
-Our method achieves the state-of-the-art performance on the USPTO-50K dataset. 
+Our method achieves the state-of-the-art performance on both USPTO-50K and USPTO-FULL datasets. 
 <div align=center>
 <img src=figures/results.png width="600px">
 </div>
