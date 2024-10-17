@@ -30,7 +30,7 @@ cd  editretro/fairseq
 pip install --editable ./
 ```
 
-&nbsp;&nbsp;&nbsp; **Remarks**: 
+&nbsp;&nbsp;&nbsp; **Remarks !!!**: 
 1. Set export CUDA_HOME=/usr/local/cuda in .bashrc;
 2. Please verify the versions of CUDA (11.6.0) and gcc (9.4.0);
 3. To ensure a successful installation of fairseq, please make sure to install Ninja first.
@@ -38,7 +38,7 @@ pip install --editable ./
 sudo apt install re2c
 sudo apt-get install ninja-build
 ```
-4. If installed successfully, a file named _fairseq/fairseq/libnat_cuda.cpython-310-x86_64-linux-gnu.so should have been generated.
+4. **If installed successfully !!!**, a file named _fairseq/fairseq/libnat_cuda.cpython-310-x86_64-linux-gnu.so should have been generated.
 
 
 ## Preprocess data
@@ -55,9 +55,9 @@ sudo apt-get install ninja-build
 Download **raw** datasets and put them in the _editretro/datasets/XXX(e.g., USPTO_50K)/raw_ folder, and then run the command to get the preprocessed datasets which will be stored in _editretro/datasets/XXX/aug_:
 
 ```python
--  cd editretro/preprocess
--  python preprocess_data.py -dataset USPTO_50K -augmentation 20 -processes 64 -spe -dropout 0 
--  python preprocess_data.py -dataset USPTO_FULL -augmentation 5 -processes 64 -spe -dropout 0
+cd preprocess
+python preprocess_data.py -dataset USPTO_50K -augmentation 20 -processes 64 -spe
+python preprocess_data.py -dataset USPTO_FULL -augmentation 10 -processes 64 -spe
 ```
 
 Then binarize the data using 
@@ -84,7 +84,7 @@ To generate and score the predictions on the test set with binarized data:
 sh  ./scripts/2_generate_50k.sh  or
 sh  ./scripts/2_generate_full.sh
 ```
-s
+
 Our method achieves the state-of-the-art performance on the USPTO-50K dataset. 
 <div align=center>
 <img src=figures/results.png width="600px">
