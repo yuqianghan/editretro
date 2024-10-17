@@ -7,10 +7,15 @@
 ## Prepare data
 ```
 cd preprocess
+python preprocess_data.py -dataset USPTO_FULL -augmentation 10 -processes 64 -spe
+python preprocess_data.py -dataset USPTO_50K -augmentation 20 -processes 64 -spe
+```
+<!-- ```
+cd preprocess
 python preprocess_data.py -dataset USPTO_50K -augmentation 20 -processes 64 -spe
 python preprocess_data.py -dataset USPTO_FULL -augmentation 10 -processes 64 -spe -train_only -batch 50000    ### change the -batch according to the number of CPUs you have.
 python preprocess_data.py -dataset USPTO_FULL -augmentation 5 -processes 64 -spe -train_except
-```
+``` -->
 
 ## Filter data
 > The filtered datasets will be stored in **datasets/USPTO_Pretrain/pretrain**.
