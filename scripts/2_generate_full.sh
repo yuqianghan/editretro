@@ -1,18 +1,18 @@
 #!/bin/bash
 
 gpus='0'
-aug=5
-topk=10
-beam_size=10
+aug=10
+topk=20
+beam_size=20
 repos_beam=5
-token_beam=2
-max_tokens=2500  #!!!TODO: reduce this number if encountering CUDA OOM
+token_beam=4
+max_tokens=1000  #!!!TODO: reduce this number if encountering CUDA OOM
 
-databin=./datasets/USPTO_FULL/aug10/data-bin  # binaried test data, the test.src are 5x augmented
-root_dir=results/finetune_50k/xxxxxxxx_xxxxxx  #TODO: point to the pretrain checkpoint path
+databin=./datasets/USPTO_FULL/aug10/data-bin  # binaried test data
+root_dir=results/finetune_full/xxxxxxxx_xxxxxx  #TODO: point to the pretrain checkpoint path
 model_dir=${root_dir}/checkpoints
 
-exp_n=1
+exp_n=1600k
 outfile=generation
 outputdir=${root_dir}/generations/$exp_n
 mkdir -p $outputdir
@@ -22,9 +22,9 @@ ckpt_path=${outputdir}/${ckpt_name}
 
 python ./utils/average_checkpoints.py --inputs ${model_dir} \
     --output ${ckpt_path} \
-    --num-epoch-checkpoints 5 \
+    --num-update-checkpoints 10 \
+    # --num-epoch-checkpoints 10 \
 	# --checkpoint-upper-bound 500 \
-    # --num-update-checkpoints 5 \
 
 CUDA_VISIBLE_DEVICES=$gpus CUDA_LAUNCH_BLOCKING=1 fairseq-generate \
 	--user-dir editretro \
