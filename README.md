@@ -92,6 +92,16 @@ Our method achieves the state-of-the-art performance on both USPTO-50K and USPTO
 <img src=figures/results.png width="600px">
 </div>
 
+We achieve even better performance with the newly provided checkpoint on the USPTO-FULL dataset 
+
+| Model         | Top-1    | Top-3    | Top-5    | Top-10   | 
+| ------------- | -------- | -------- | -------- | -------- | 
+| R-SMILES      | 48.9     | 66.6     | 72.0     | 76.4     |
+| EditRetro     | 52.2     | 67.1     | 71.6     | 74.2     |
+| EditRetro     | **54.3** | **67.6** | 71.1     | 74.3     | 
+
+
+
 ## Interactive Inference
 After download the checkpoints on USPTO-50K and USPTO-FULL https://drive.google.com/drive/folders/1em_I-PN-OvLXuCPfzWzRAUH-KZvSFL-U?usp=sharing, you can iteractively edit your own molecule following the _**interactive/README**_
 ```shell
