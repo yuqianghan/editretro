@@ -92,7 +92,7 @@ Our method achieves the state-of-the-art performance on both USPTO-50K and USPTO
 <img src=figures/results.png width="600px">
 </div>
 
-We achieve even better performance with the newly provided checkpoint on the USPTO-FULL dataset 
+We achieve even better performance with the newly provided checkpoint on the USPTO-FULL dataset https://drive.google.com/file/d/19nb3Y6dro6DaEXu6MNRXui48LRE9C7tp/view?usp=drive_link
 
 | Model         | Top-1    | Top-3    | Top-5    | Top-10   | 
 | ------------- | -------- | -------- | -------- | -------- | 
