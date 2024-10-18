@@ -85,7 +85,7 @@ sh  ./scripts/2_generate_50k.sh  or
 sh  ./scripts/2_generate_full.sh
 ```
 
-You can use your own trained checkpoint or use our prepared one available at https://drive.google.com/file/d/12kLcr7R0oBcsgqOSvgZAQk9a6EEkyW8S/view?usp=drive_link. Refer to the 2_generate_xxx.sh script to specify the checkpoint.
+You can use your own trained checkpoint or use our prepared one available at https://drive.google.com/file/d/1nH9poV9FpO5nKcF1IMVZpeAACGeH94Gu/view?usp=drive_link and https://drive.google.com/file/d/19nb3Y6dro6DaEXu6MNRXui48LRE9C7tp/view?usp=drive_link. Refer to the 2_generate_xxx.sh script to specify the checkpoint.
 
 Our method achieves the state-of-the-art performance on both USPTO-50K and USPTO-FULL datasets. 
 <div align=center>
