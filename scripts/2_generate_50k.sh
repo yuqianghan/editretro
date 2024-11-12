@@ -10,22 +10,25 @@ token_beam=4
 max_tokens=2000   #!!!TODO: reduce this number if encountering CUDA OOM
 
 databin=./datasets/USPTO_50K/aug20/data-bin  # binaried test data
-root_dir=results/finetune_50k/xxxxxxxx_xxxxxx  #TODO: point to the pretrain checkpoint path
-model_dir=${root_dir}/checkpoints
 
+root_dir=results/finetune_50k/xxxxxxxx_xxxxxx  #TODO: point to the checkpoint path
 exp_n=1
 outfile=generation
-outputdir=${root_dir}/generations/$exp_n
-mkdir -p $outputdir
+outputdir=${root_dir}/generations/${exp_n}
+mkdir -p ${outputdir}
 
-ckpt_name=finetune.pt
-ckpt_path=${outputdir}/${ckpt_name}
+# If you are using our provided checkpoint, replace ckpt_path with the path to your specific checkpoint.
+ckpt_path=xxxxxx/checkpoint_50k.pt
 
-###!!!TODO: average multiple (dozens of) checkpoints to get better performance
-python ./utils/average_checkpoints.py --inputs ${model_dir} \
-    --output ${ckpt_path} \
-    --num-epoch-checkpoints 40 \
-	--checkpoint-upper-bound 40 \
+####!!! If you fintune the model yourself, uncomment the following codes to process the checkpoints.
+# model_dir=${root_dir}/checkpoints
+# ckpt_name=finetune.pt   
+# ckpt_path=${outputdir}/${ckpt_name}
+####!!!TODO: average multiple (dozens of) checkpoints to get better performance
+# python ./utils/average_checkpoints.py --inputs ${model_dir} \
+#     --output ${ckpt_path} \
+#     --num-epoch-checkpoints 40 \
+# 	--checkpoint-upper-bound 40 \
 
 CUDA_VISIBLE_DEVICES=$gpus CUDA_LAUNCH_BLOCKING=1 fairseq-generate \
 	--user-dir editretro \
@@ -44,7 +47,7 @@ CUDA_VISIBLE_DEVICES=$gpus CUDA_LAUNCH_BLOCKING=1 fairseq-generate \
 	--mask-beam ${mask_beam} \
 	--token-beam ${token_beam} \
 	--fp16 \
-	--print-step --retain-iter-history >$outputdir/${outfile}.txt \
+	--print-step --retain-iter-history >${outputdir}/${outfile}.txt \
 
 
 # post processing
