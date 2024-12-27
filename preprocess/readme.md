@@ -2,7 +2,7 @@
 
 ```
 -  python preprocess_data.py -dataset USPTO_50K -augmentation 20 -processes 8 -spe -dropout 0 
--  python preprocess_data.py -dataset USPTO_FULL -augmentation 5 -processes 8 -spe -dropout 0
+-  python preprocess_data.py -dataset USPTO_FULL -augmentation 10 -processes 8 -spe -dropout 0
 ```
 
 - Data processing using fairseq, for example, USPTO_50K,
